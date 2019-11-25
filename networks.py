@@ -102,33 +102,27 @@ class Network_Generator():
             print("Training Loss Iteration", loss_train,flush=True)
 
 
-class Res_Auto_2d_Model(nn.Module):
+class Res_Auto_3d_Model_Occu_Parallel(nn.Module):
     def __init__(self):
-        super(Res_Auto_2d_Model,self).__init__()
+        super(Res_Auto_3d_Model_Occu_Parallel,self).__init__()
 
-        self.encode = nn.Sequential(layers.Res_Block_Down_2D(1, 4, 3, 1, nn.SELU(), True),
-                                    layers.Res_Block_Down_2D(4, 4, 3, 1, nn.SELU(), True))
-        self.decode = nn.Sequential(layers.Res_Block_Up_2D(4, 4, 3, 1 , nn.SELU()),
-                                    layers.Res_Block_Up_2D(4, 1, 3, 1 , nn.SELU()))
+        self.model = nn.DataParallel(Res_Auto_3d_Model_Occu())
 
-    def forward(self, x):
-        out = self.encode(x)
-        out = self.decode(out)
-
-        return out
+    def forward(self, volume, coords):
+        return self.model(volume, coords)
 
 
 class Res_Auto_3d_Model_Occu(nn.Module):
     def __init__(self):
         super(Res_Auto_3d_Model_Occu,self).__init__()
 
-        self.encode = nn.Sequential(layers.Res_Block_Down_3D(1, 16, 3, 1, nn.SELU(), True),
+        self.encode = nn.Sequential(layers.Res_Block_Down_3D(1, 16, 3, 1, nn.SELU(), False),
                                     layers.Res_Block_Down_3D(16, 16, 3, 1, nn.SELU(), False),
                                     layers.Res_Block_Down_3D(16, 32, 3, 1, nn.SELU(), False),
                                     layers.Res_Block_Down_3D(32, 16, 3, 1, nn.SELU(), False),
                                     layers.Res_Block_Down_3D(16, 1, 3, 1, nn.SELU(), True))
 
-        self.decode = nn.Sequential(layers.Res_Block_Up_Flat(4 + 3, 128, nn.SELU()),
+        self.decode = nn.Sequential(layers.Res_Block_Up_Flat(60 + 3, 128, nn.SELU()),
                                     layers.Res_Block_Up_Flat(128, 256, nn.SELU()),
                                     layers.Res_Block_Up_Flat(256, 128, nn.SELU()),
                                     layers.Res_Block_Up_Flat(128, 1, nn.Sigmoid()))
