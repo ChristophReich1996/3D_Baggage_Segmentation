@@ -12,11 +12,12 @@ import time
 
 
 class WeaponDataset(data.Dataset):
-    def __init__(self, root, threshold_min=0, threshold_max=30000, npoints=2**10, side_len=32):
+    def __init__(self, root, threshold_min=0, threshold_max=30000, dim_max=640, npoints=2**10, side_len=32):
         self.threshold_min = threshold_min
         self.threshold_max = threshold_max
         self.npoints = npoints
         self.side_len = side_len
+        self.dim_max = int(dim_max / side_len)
 
         self.data = []
         mixed_labels = []
@@ -67,18 +68,21 @@ class WeaponDataset(data.Dataset):
 
         volume_with_labels_tc = torch.from_numpy(np.expand_dims(np.concatenate((volume_n, labels_expanded_n), axis = 0), axis=0))
         volume_with_labels_pooled_tc = nn.functional.max_pool3d(volume_with_labels_tc, self.side_len, self.side_len)
+        volume_with_labels_pooled_tc = volume_with_labels_pooled_tc[:,:,0:self.dim_max,:,:]
+        volume_with_labels_pooled_tc = nn.functional.pad(volume_with_labels_pooled_tc, 
+                                                        (0,0,0,0,0,self.dim_max-volume_with_labels_pooled_tc.shape[2]))
         
         # TODO: thresholding 
         #data = (volume >= 0.0) & (volume <= 1.0)
 
-        sampling_shapes_tc = volume_with_labels_pooled_tc.shape
+        sampling_shapes_tc = volume_with_labels_tc.shape
 
         x_tc = torch.LongTensor(self.npoints).random_(0, sampling_shapes_tc[2])
         y_tc = torch.LongTensor(self.npoints).random_(0, sampling_shapes_tc[3])
         z_tc = torch.LongTensor(self.npoints).random_(0, sampling_shapes_tc[4])
 
         coords_tc = torch.cat((torch.unsqueeze(x_tc,dim=1), torch.unsqueeze(y_tc,dim=1), torch.unsqueeze(z_tc,dim=1)), axis = 1)
-        labels_tc = torch.unsqueeze(volume_with_labels_pooled_tc[0,1,x_tc,y_tc,z_tc], dim=1)
+        labels_tc = torch.unsqueeze(volume_with_labels_tc[0,1,x_tc,y_tc,z_tc], dim=1)
 
         return  volume_with_labels_pooled_tc[:,0,:,:,:], coords_tc, labels_tc
 
@@ -95,12 +99,16 @@ class WeaponDataset(data.Dataset):
 
 if __name__ == '__main__':
     print("Generating WeaponDataset...")
-    train = True
+    train = True 
     dataset = WeaponDataset(root="../../../projects_students/Smiths_LKA_Weapons/ctix-lka-20190503/",
                         threshold_min=1700,
                         threshold_max=2700,
                         npoints=50000,
                         side_len=64)
 
-    elm = dataset[0]
-    print(elm[0].shape, elm[1].shape, elm[2].shape)
+    dataloader = torch.utils.data.DataLoader(dataset, batch_size=2, shuffle=True)
+    print(len(dataset))
+    for full, coords, labels in dataloader:
+        print(full.shape, coords.shape, labels.shape)
+
+                                        
