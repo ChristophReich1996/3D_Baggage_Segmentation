@@ -5,7 +5,6 @@ import torch.nn.functional as F
 from torch.autograd import Function
 import numpy as np
 from config import device
-import sparseconvnet as scn
 
 
 # 3D +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++

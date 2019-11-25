@@ -1,18 +1,15 @@
-import numpy as np
-import torch
 from torch import nn
-
 import torch.utils.data as data
 import os
 import os.path
 import torch
 import numpy as np
 import itk
-import time
+from config import device
 
 
 class WeaponDataset(data.Dataset):
-    def __init__(self, root, threshold_min=0, threshold_max=30000, dim_max=640, npoints=2**10, side_len=32):
+    def __init__(self, root, start_index=0, end_index=-1, threshold_min=0, threshold_max=30000, dim_max=640, npoints=2**10, side_len=32):
         self.threshold_min = threshold_min
         self.threshold_max = threshold_max
         self.npoints = npoints
@@ -22,7 +19,6 @@ class WeaponDataset(data.Dataset):
         self.data = []
         mixed_labels = []
 
-        
         for direc, _, files in os.walk(root):
             for file in files:
                 if file.endswith(".mha"):
@@ -41,6 +37,10 @@ class WeaponDataset(data.Dataset):
                 if l.startswith(name):
                     self.labels[i] = l
                     break
+
+        self.data = self.data[start_index:end_index]
+        self.labels = self.labels[start_index:end_index]
+
 
     def __getitem__(self, index):
         data_file = self.data[index]
@@ -84,7 +84,7 @@ class WeaponDataset(data.Dataset):
         coords_tc = torch.cat((torch.unsqueeze(x_tc,dim=1), torch.unsqueeze(y_tc,dim=1), torch.unsqueeze(z_tc,dim=1)), axis = 1)
         labels_tc = torch.unsqueeze(volume_with_labels_tc[0,1,x_tc,y_tc,z_tc], dim=1)
 
-        return  volume_with_labels_pooled_tc[:,0,:,:,:], coords_tc, labels_tc
+        return  volume_with_labels_pooled_tc[:,0,:,:,:].float().to(device), coords_tc.float().to(device), labels_tc.float().to(device)
 
 
     def __len__(self):
@@ -96,6 +96,15 @@ class WeaponDataset(data.Dataset):
     def get_side_len(self):
         return self.side_len
 
+def many_to_one_collate_fn(batch):
+    volumes = torch.stack([elm[0] for elm in batch], dim=0)
+    coords = torch.stack([elm[1] for elm in batch], dim=0).view(-1,3)
+    labels = torch.stack([elm[2] for elm in batch], dim=0).view(-1,1)
+    
+    return volumes, coords, labels
+
+
+
 
 if __name__ == '__main__':
     print("Generating WeaponDataset...")
@@ -103,10 +112,10 @@ if __name__ == '__main__':
     dataset = WeaponDataset(root="../../../projects_students/Smiths_LKA_Weapons/ctix-lka-20190503/",
                         threshold_min=1700,
                         threshold_max=2700,
-                        npoints=50000,
+                        npoints=5000,
                         side_len=64)
 
-    dataloader = torch.utils.data.DataLoader(dataset, batch_size=2, shuffle=True)
+    dataloader = torch.utils.data.DataLoader(dataset, batch_size=2, shuffle=True, collate_fn=many_to_one_collate_fn)
     print(len(dataset))
     for full, coords, labels in dataloader:
         print(full.shape, coords.shape, labels.shape)
