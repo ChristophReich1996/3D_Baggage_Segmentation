@@ -87,7 +87,7 @@ class WeaponDataset(data.Dataset):
             z_tc = torch.LongTensor(self.npoints).random_(0, sampling_shapes_tc[4])
         
         elif self.sampling == 'boxed':
-            share_box = 0.9
+            share_box = 1.
             x_in_tc = torch.LongTensor(int(self.npoints * share_box)).random_(int(offsets_n[0]), int(offsets_n[0] + labels_dims[0]))
             y_in_tc = torch.LongTensor(int(self.npoints * share_box)).random_(int(offsets_n[1]), int(offsets_n[1] + labels_dims[1]))
             z_in_tc = torch.LongTensor(int(self.npoints * share_box)).random_(int(offsets_n[2]), int(offsets_n[2] + labels_dims[2]))
@@ -107,7 +107,7 @@ class WeaponDataset(data.Dataset):
         coords_tc = torch.cat((torch.unsqueeze(x_tc,dim=1), torch.unsqueeze(y_tc,dim=1), torch.unsqueeze(z_tc,dim=1)), axis = 1)
         labels_tc = torch.unsqueeze(volume_with_labels_tc[0,1,x_tc,y_tc,z_tc], dim=1)
 
-        return  volume_with_labels_pooled_tc[:,0,:,:,:].float().to(device), coords_tc.float().to(device), labels_tc.float().to(device)
+        return  volume_with_labels_pooled_tc[:,0,:,:,:].float(), coords_tc.float(), labels_tc.float()
 
 
     def __len__(self):
