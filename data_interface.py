@@ -78,12 +78,24 @@ class WeaponDataset(data.Dataset):
 
     def get_side_len(self):
         return self.side_len
-            
+
+    def write_obj(self, index):
+        vol = self.__getitem__(index)[0].cpu().numpy()
+        maximum = np.max(vol)
+        with open('outfile_org.obj','w') as f:
+            for i in range(vol.shape[1]):
+                for j in range(vol.shape[2]):
+                    for k in range(vol.shape[3]):
+                        color = utils.get_colour(vol[0][i][j][k], maximum)
+                        f.write("v " + " " + str(i) + " " + str(j) + " " + str(k) + 
+                                " " + str(color[0]) + " " + str(color[1]) + " " + str(color[2]) + "\n")
+
+                
 
 
 class WeaponDatasetGenerator():
     def __init__(self, root, target_path,start_index=0, end_index=-1, threshold_min=0, threshold_max=30000, 
-                dim_max=640, side_len=32):
+                dim_max=640, side_len=16):
         self.threshold_min = threshold_min
         self.threshold_max = threshold_max
         self.side_len = side_len
@@ -149,7 +161,7 @@ class WeaponDatasetGenerator():
             volume_pooled_tg = nn.functional.pad(volume_pooled_tg, 
                                                             (0,0,0,0,0,self.dim_max-volume_pooled_tg.shape[1]))
             print("Padding", t4.stop())
-            np.save(self.target_path +str(index) + ".npy", volume_pooled_tg.cpu().numpy())
+            np.save(self.target_path +str(index) + ".npy", volume_pooled_tg.cpu().numpy().astype(np.float32))
 
             # Take care of labels and store coords
             labels_n = itk.GetArrayFromImage(labels)
@@ -159,7 +171,7 @@ class WeaponDatasetGenerator():
             x_n = np.expand_dims(labels_indices_n[:, 0] + offsets_n[0], axis=1)
             y_n = np.expand_dims(labels_indices_n[:, 1] + offsets_n[1], axis=1)
             z_n = np.expand_dims(labels_indices_n[:, 2] + offsets_n[2], axis=1)
-            np.save(self.target_path +str(index) + "_label.npy", np.concatenate((x_n,y_n,z_n), axis=1))
+            np.save(self.target_path +str(index) + "_label.npy", np.concatenate((x_n,y_n,z_n), axis=1).astype(np.uint16))
 
 
         
@@ -175,18 +187,17 @@ def many_to_one_collate_fn(batch):
 
 
 if __name__ == '__main__':
-    print("Generating WeaponDataset...")
-    train = True 
     dataset_gen = WeaponDatasetGenerator(root="../../../projects_students/Smiths_LKA_Weapons/ctix-lka-20190503/",
-                        target_path="../../../../fastdata/Smiths_LKA_Weapons/len_32/train/",
-                        side_len=32)
+                        target_path="../../../../fastdata/Smiths_LKA_Weapons/len_16/",
+                        side_len=16)
 
-    dataset = WeaponDataset(target_path="../../../../fastdata/Smiths_LKA_Weapons/len_32/train/",
-                        npoints=2**14,
-                        side_len=32)
+    #dataset = WeaponDataset(target_path="../../../../fastdata/Smiths_LKA_Weapons/len_32/train/",
+    #                    npoints=2**14,
+    #                    length=1,
+    #                    side_len=32)
 
-    #dataset_gen.generate_data()
-    print(dataset[0][0].shape, dataset[0][1].shape, dataset[0][2].shape)
+    dataset_gen.generate_data()
+    #dataset.write_obj(0)
     #dataloader = torch.utils.data.DataLoader(dataset, batch_size=1, shuffle=True, collate_fn=many_to_one_collate_fn, num_workers=8)
     #print(len(dataset))
     #for full, coords, labels in dataloader:
