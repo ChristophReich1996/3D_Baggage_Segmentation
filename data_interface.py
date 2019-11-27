@@ -7,24 +7,29 @@ import numpy as np
 import itk
 from config import device
 import utils
+from pykdtree.kdtree import KDTree
 
 class WeaponDataset(data.Dataset):
-    def __init__(self, target_path, dim_max=640, npoints=2**10, side_len=32, sampling='one_fast'):
+    def __init__(self, target_path, length, dim_max=640, npoints=2**10, side_len=32, sampling='one'):
         self.npoints = npoints
         self.side_len = side_len
         self.dim_max = int(dim_max / side_len)
         self.sampling = sampling
         self.target_path=target_path
+        self.length = length
 
 
     def __getitem__(self, index):
-        t = utils.Timer()
-        volume_n = np.load(self.target_path +str(index) + ".npy")
-        label_n = np.load(self.target_path +str(index) + "_label.npy")
+       # t = utils.Timer()
+        try:
+            volume_n = np.load(self.target_path +str(index) + ".npy")
+            label_n = np.load(self.target_path +str(index) + "_label.npy")
+        except:
+            return self.__getitem__((index+1) % self.__len__())
 
         sampling_shapes_tc = volume_n.shape
 
-        share_box=1
+        share_box=0.5
         if self.sampling == 'default':
             # TODO kdtree
             raise NotImplementedError
@@ -47,13 +52,29 @@ class WeaponDataset(data.Dataset):
             coords = np.concatenate((coords_one, coords_zero), axis=0)
             labels = np.concatenate((np.ones((coords_one.shape[0], 1)), np.zeros((coords_zero.shape[0], 1))), axis=0)
 
+        elif self.sampling == 'one':
+            # Coords with one as label
+            coords_one = label_n[np.random.choice(label_n.shape[0], int(self.npoints * share_box), replace=False), :]
+
+            # Mixed Coords
+            x_n = np.random.randint(sampling_shapes_tc[1], size=(int(self.npoints * (1-share_box)),1))
+            y_n = np.random.randint(sampling_shapes_tc[2], size=(int(self.npoints * (1-share_box)),1))
+            z_n = np.random.randint(sampling_shapes_tc[3], size=(int(self.npoints * (1-share_box)),1))
+            coords_zero = np.concatenate((x_n, y_n, z_n), axis=1)
+            kd_tree = KDTree(label_n, leafsize=16)
+            dist, _ = kd_tree.query(coords_zero, k=1)
+            labels_zero = np.expand_dims(dist == 0, axis=1).astype(float)
+
+            coords = np.concatenate((coords_one, coords_zero), axis=0)
+            labels = np.concatenate((np.ones((coords_one.shape[0], 1)), labels_zero), axis=0)
+
         else:
             raise NotImplementedError
-        print("Access time", t.stop())
-        return torch.from_numpy(volume_n), torch.from_numpy(coords), torch.from_numpy(labels)
+        #print("Access time", t.stop())
+        return torch.from_numpy(volume_n).float(), torch.from_numpy(coords).float(), torch.from_numpy(labels).float()
 
     def __len__(self):
-        return len(self.data)
+        return self.length
 
     def get_side_len(self):
         return self.side_len
