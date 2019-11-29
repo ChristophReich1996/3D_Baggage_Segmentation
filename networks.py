@@ -42,10 +42,10 @@ class Network_Generator():
                 self._oj_model.eval()
                 # Makes predictions
                 volume, coords, labels = batch
-                yhat = self._oj_model(volume, coords)
+                yhat = self._oj_model(volume.to(device), coords.to(device))
 
                 # Computes validation loss
-                loss_val_batch = self._oj_loss(yhat, labels).item()
+                loss_val_batch = self._oj_loss(yhat, labels.to(device)).item()
                 losses_val_batch.append(loss_val_batch)
 
             loss_val = np.mean(losses_val_batch)
@@ -59,8 +59,8 @@ class Network_Generator():
         loss_best = float('inf')
         losses_train = []
         losses_val = []
-        loader_train = DataLoader(dataset=train_dataset, batch_size=self._size_batch, pin_memory=False, shuffle=True, collate_fn=self._collate_fn)
-        loader_val = DataLoader(dataset=val_dataset, batch_size=self._size_batch, pin_memory=False, shuffle=True, collate_fn=self._collate_fn)
+        loader_train = DataLoader(dataset=train_dataset, batch_size=self._size_batch, pin_memory=True, shuffle=True, collate_fn=self._collate_fn)
+        loader_val = DataLoader(dataset=val_dataset, batch_size=self._size_batch, pin_memory=True, shuffle=True, collate_fn=self._collate_fn)
         if load:
             self._oj_model.load_state_dict(torch.load( "model/"+ type(self._oj_model).__name__ + "_" + str(device) + ".pt"))
             self._oj_optimizer.load_state_dict(torch.load( "optimizer/"+ type(self._oj_model).__name__ + "_" + str(device) + ".pt"))
@@ -70,8 +70,8 @@ class Network_Generator():
         def _step_train(batch):
             volume, coords, labels = batch
             self._oj_model.train()
-            yhat = self._oj_model(volume, coords)
-            loss_train = self._oj_loss(yhat, labels)
+            yhat = self._oj_model(volume.to(device), coords.to(device))
+            loss_train = self._oj_loss(yhat, labels.to(device))
             loss_train.backward()
             self._oj_optimizer.step()
             self._oj_optimizer.zero_grad()
@@ -117,7 +117,7 @@ class Res_Auto_3d_Model_Occu(nn.Module):
         super(Res_Auto_3d_Model_Occu,self).__init__()
 
         self.encode = nn.Sequential(layers.Res_Block_Down_3D(1, 16, 3, 1, nn.SELU(), False),
-                                    layers.Res_Block_Down_3D(16, 16, 3, 1, nn.SELU(), False),
+                                    layers.Res_Block_Down_3D(16, 16, 3, 1, nn.SELU(), True),
                                     layers.Res_Block_Down_3D(16, 32, 3, 1, nn.SELU(), False),
                                     layers.Res_Block_Down_3D(32, 16, 3, 1, nn.SELU(), False),
                                     layers.Res_Block_Down_3D(16, 1, 3, 1, nn.SELU(), True))
