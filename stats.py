@@ -46,3 +46,4 @@ class Statistics(object):
 if __name__ == '__main__':
     stats = Statistics(WeaponDataset(target_path="../../../../fastdata/Smiths_LKA_Weapons/len_16/", npoints=2 ** 14,
                                      side_len=16, length=2600), batch_size=100, num_workers=10)
+    print(stats.calc_class_balance())
