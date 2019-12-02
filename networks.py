@@ -29,18 +29,43 @@ class Network_Generator():
         self._collate_fn = collate_fn
 
 
-    def test(self, test_dataset):
-        def write_obj(self, index):
-            vol = self.__getitem__(index)[0].cpu().numpy()
-            maximum = np.max(vol)
-            with open('outfile_org.obj','w') as f:
-                for i in range(vol.shape[1]):
-                    for j in range(vol.shape[2]):
-                        for k in range(vol.shape[3]):
-                            color = utils.get_colour(vol[0][i][j][k], maximum)
-                            f.write("v " + " " + str(i) + " " + str(j) + " " + str(k) + 
-                                    " " + str(color[0]) + " " + str(color[1]) + " " + str(color[2]) + "\n")
-        return 
+    def test(self, test_dataset, draw=True):
+        loader_test = DataLoader(dataset=test_dataset, batch_size=self._size_batch, pin_memory=False, shuffle=True, collate_fn=self._collate_fn)
+        checkpoint = torch.load("model/"+ type(self._oj_model).__name__ + "_" + str(device) + ".pt", map_location=lambda storage, loc: storage)
+        self._oj_model.load_state_dict(checkpoint)
+        del checkpoint  # dereference seems crucial
+        torch.cuda.empty_cache()
+
+        with torch.no_grad():
+            losses_test_batch = []
+            for batch in loader_test:
+                self._oj_model.eval()
+                # Makes predictions
+                volume, coords, labels, actual = batch
+                yhat = self._oj_model.inference(volume.to(device), coords.to(device))
+
+                if draw:
+                    hits = torch.squeeze(yhat)
+                    print("Acitvation", torch.sum(yhat))
+                    locs = coords[hits == 1]
+                    to_write = locs.cpu().numpy().astype(np.short)
+                    # Only each 10th as meshlab crashes otherwise
+                    to_write_act = actual[::10,:].cpu().numpy().astype(np.short)
+                    with open('outfile_auto.obj','w') as f:
+                        for line in to_write:
+                            f.write("v " + " " + str(line[0]) + " " + str(line[1]) + " " + str(line[2]) + 
+                             " " + "1.0" + " " + "0.0" + " " + "0.0" + "\n")
+                        for line in to_write_act:
+                            f.write("v " + " " + str(line[0]) + " " + str(line[1]) + " " + str(line[2]) + 
+                            " " + "0.0" + " " + "1.0" + " " + "0.0" + "\n")
+                    
+
+                loss_test_batch = self._oj_loss(yhat, labels.to(device)).item()
+                losses_test_batch.append(loss_test_batch)
+        
+        #TODO for all batches not only last one
+        return loss_test_batch
+
 
     # Validate, ignore grads
     def _val(self, loader_val, losses_val):
@@ -120,6 +145,8 @@ class Res_Auto_3d_Model_Occu_Parallel(nn.Module):
     def forward(self, volume, coords):
         return self.model(volume, coords)
 
+    def inference(self, volume, coords):
+        return (torch.sign(self.forward(volume, coords) - 0.1) + 1) / 2
 
 class Res_Auto_3d_Model_Occu(nn.Module):
     def __init__(self):
@@ -142,3 +169,4 @@ class Res_Auto_3d_Model_Occu(nn.Module):
         out = self.decode(torch.cat((torch.repeat_interleave(out, int(coords.shape[0]/volume.shape[0]), dim=0), coords), dim=1))
         print("Activation", torch.sum(out).item()) # See if activated
         return out
+    

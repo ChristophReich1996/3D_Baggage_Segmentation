@@ -10,7 +10,7 @@ import utils
 from pykdtree.kdtree import KDTree
 
 class WeaponDataset(data.Dataset):
-    def __init__(self, target_path, length, dim_max=640, npoints=2**10, side_len=32, sampling='one', offset=0):
+    def __init__(self, target_path, length, dim_max=640, npoints=2**10, side_len=32, sampling='one', offset=0, test=False):
         self.npoints = npoints
         self.side_len = side_len
         self.dim_max = int(dim_max / side_len)
@@ -18,6 +18,7 @@ class WeaponDataset(data.Dataset):
         self.target_path=target_path
         self.length = length
         self.offset = offset
+        self.test=test
 
 
     def __getitem__(self, index):
@@ -73,7 +74,10 @@ class WeaponDataset(data.Dataset):
         else:
             raise NotImplementedError
         #print("Access time", t.stop())
-        return torch.from_numpy(volume_n).float(), torch.from_numpy(coords).float(), torch.from_numpy(labels).float()
+        if self.test:
+            return torch.from_numpy(volume_n).float(), torch.from_numpy(coords).float(), torch.from_numpy(labels).float(), torch.from_numpy(label_n.astype(int)).float()
+        else:
+            return torch.from_numpy(volume_n).float(), torch.from_numpy(coords).float(), torch.from_numpy(labels).float()
 
     def __len__(self):
         return self.length
@@ -180,8 +184,15 @@ def many_to_one_collate_fn(batch):
     volumes = torch.stack([elm[0] for elm in batch], dim=0)
     coords = torch.stack([elm[1] for elm in batch], dim=0).view(-1,3)
     labels = torch.stack([elm[2] for elm in batch], dim=0).view(-1,1)
-    
     return volumes, coords, labels
+
+def many_to_one_collate_fn_test(batch):
+    volumes = torch.stack([elm[0] for elm in batch], dim=0)
+    coords = torch.stack([elm[1] for elm in batch], dim=0).view(-1,3)
+    labels = torch.stack([elm[2] for elm in batch], dim=0).view(-1,1)
+    actual = torch.stack([elm[3] for elm in batch], dim=0).view(-1,3    )
+    return volumes, coords, labels, actual
+
 
 
 if __name__ == '__main__':
