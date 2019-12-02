@@ -46,7 +46,7 @@ class Network_Generator():
 
                 if draw:
                     hits = torch.squeeze(yhat)
-                    print("Acitvation", torch.sum(yhat))
+                    print("Acitvation Test", torch.sum(yhat).item())
                     locs = coords[hits == 1]
                     to_write = locs.cpu().numpy().astype(np.short)
                     # Only each 10th as meshlab crashes otherwise
@@ -54,10 +54,10 @@ class Network_Generator():
                     with open('outfile_auto.obj','w') as f:
                         for line in to_write:
                             f.write("v " + " " + str(line[0]) + " " + str(line[1]) + " " + str(line[2]) + 
-                             " " + "1.0" + " " + "0.0" + " " + "0.0" + "\n")
+                             " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
                         for line in to_write_act:
                             f.write("v " + " " + str(line[0]) + " " + str(line[1]) + " " + str(line[2]) + 
-                            " " + "0.0" + " " + "1.0" + " " + "0.0" + "\n")
+                            " " + "0.5" + " " + "1.0" + " " + "0.5" + "\n")
                     
 
                 loss_test_batch = self._oj_loss(yhat, labels.to(device)).item()
@@ -117,7 +117,7 @@ class Network_Generator():
 
             losses_train_batch = []
             for i, batch in enumerate(loader_train):
-
+            
                 # One step of training
                 loss_train_batch = _step_train(batch)
                 print("Training Loss Batch", i, loss_train_batch,flush=True)
@@ -167,6 +167,6 @@ class Res_Auto_3d_Model_Occu(nn.Module):
         out = self.encode(volume)
         out = out.view(out.shape[0],-1)
         out = self.decode(torch.cat((torch.repeat_interleave(out, int(coords.shape[0]/volume.shape[0]), dim=0), coords), dim=1))
-        print("Activation", torch.sum(out).item()) # See if activated
+        print("Activation Model", torch.sum(out).item()) # See if activated
         return out
     

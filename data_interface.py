@@ -19,10 +19,13 @@ class WeaponDataset(data.Dataset):
         self.length = length
         self.offset = offset
         self.test=test
+        self.permutation = np.random.permutation(length) # To  make training more complicated
 
 
     def __getitem__(self, index):
        # t = utils.Timer()
+
+        index = self.permutation[index]
         index = index + self.offset
         try:
             volume_n = np.load(self.target_path +str(index) + ".npy")

@@ -35,7 +35,7 @@ network = Network_Generator(rate_learn=1e-4,
 print("Completed", flush=True)
 print("", flush=True)
 
-print("Training", flush=True)
+print("Testing", flush=True)
 network.test(test_set, True)
 
 
