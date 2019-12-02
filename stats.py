@@ -6,6 +6,8 @@ import matplotlib.pyplot as plt
 import tikzplotlib.save as to_tikz
 from torch.utils.data import DataLoader
 
+from data_interface import *
+
 
 class Statistics(object):
     """
@@ -20,7 +22,7 @@ class Statistics(object):
         :param torch.utils.data.Dataset test_dataset:
         """
         # Check if dataset is in train mode
-        assert self.dataset.test, 'Dataset must me in train mode'
+        assert dataset.test, 'Dataset must me in train mode'
         # Init dataset
         self.dataset = DataLoader(dataset=dataset, batch_size=batch_size, shuffle=False,
                                   num_workers=num_workers)
