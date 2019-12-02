@@ -3,8 +3,10 @@ import torch.utils.data
 import torch.nn.functional as F
 import numpy as np
 import matplotlib.pyplot as plt
-import tikzplotlib.save as to_tikz
+# import tikzplotlib.save as to_tikz
 from torch.utils.data import DataLoader
+
+from data_interface import * 
 
 
 class Statistics(object):
@@ -20,10 +22,9 @@ class Statistics(object):
         :param torch.utils.data.Dataset test_dataset:
         """
         # Check if dataset is in train mode
-        assert self.dataset.test, 'Dataset must me in train mode'
+        assert dataset.test, 'Dataset must me in train mode'
         # Init dataset
-        self.dataset = DataLoader(dataset=dataset, batch_size=batch_size, shuffle=False,
-                                  num_workers=num_workers)
+        self.dataset = DataLoader(dataset=dataset, batch_size=batch_size, shuffle=False)
 
     def plot_histogram(self) -> None:
         pass
@@ -45,4 +46,5 @@ class Statistics(object):
 
 if __name__ == '__main__':
     stats = Statistics(WeaponDataset(target_path="../../../../fastdata/Smiths_LKA_Weapons/len_16/", npoints=2 ** 14,
-                                     side_len=16, length=2600), batch_size=100, num_workers=10)
+                                     side_len=16, length=2600, test=True), batch_size=100, num_workers=10)
+    print(stats.calc_class_balance())
