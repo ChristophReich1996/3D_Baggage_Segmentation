@@ -16,13 +16,13 @@ print("Load Datasets:", end = " ", flush=True)
 training_set = WeaponDataset(target_path="../../../../fastdata/Smiths_LKA_Weapons/len_16/",
                         npoints=2**14,
                         side_len=16,
-                        length=2000)
+                        length=2400)
 print("Training Set Completed" , end=" - ", flush=True)
 val_set = WeaponDataset(target_path="../../../../fastdata/Smiths_LKA_Weapons/len_16/",
                         npoints=2**14,
                         side_len=16,
                         length=200, 
-                        offset=2000)
+                        offset=2400)
 print("Validation Set Completed", flush=True)
 
 print("", flush=True)

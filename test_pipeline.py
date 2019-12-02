@@ -16,8 +16,8 @@ print("Load Dataset:", end = " ", flush=True)
 test_set = WeaponDataset(target_path="../../../../fastdata/Smiths_LKA_Weapons/len_16/",
                         npoints=2**14,
                         side_len=16,
-                        length=1,
-                        offset=2200,
+                        length=200,
+                        offset=2600,
                         test=True)
 print("Test Set Completed" , end=" - ", flush=True)
 
