@@ -23,7 +23,7 @@ class Statistics(object):
         assert self.dataset.test, 'Dataset must me in train mode'
         # Init dataset
         self.dataset = DataLoader(dataset=dataset, batch_size=batch_size, shuffle=False,
-                                           num_workers=num_workers)
+                                  num_workers=num_workers)
 
     def plot_histogram(self) -> None:
         pass
@@ -41,3 +41,8 @@ class Statistics(object):
         # Average over length of number of batches
         class_balance /= len(self.dataset)
         return class_balance
+
+
+if __name__ == '__main__':
+    stats = Statistics(WeaponDataset(target_path="../../../../fastdata/Smiths_LKA_Weapons/len_16/", npoints=2 ** 14,
+                                     side_len=16, length=2600), batch_size=100, num_workers=10)
