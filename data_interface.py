@@ -34,8 +34,8 @@ class WeaponDataset(data.Dataset):
             return self.__getitem__((index+1) % self.__len__())
 
         sampling_shapes_tc = volume_n.shape * self.side_len
-
         share_box=0.5
+
         if self.sampling == 'default':
             # TODO kdtree
             raise NotImplementedError

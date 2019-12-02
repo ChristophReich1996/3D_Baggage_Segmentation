@@ -120,7 +120,8 @@ class Network_Generator():
             
                 # One step of training
                 loss_train_batch = _step_train(batch)
-                print("Training Loss Batch", i, loss_train_batch,flush=True)
+                if i % 16 == 15:
+                    print("Training Loss Batch", i, loss_train_batch,flush=True)
 
                 if i % self._size_print_every == self._size_print_every-1:
                     loss_val = self._val(loader_val, losses_val)
@@ -167,6 +168,6 @@ class Res_Auto_3d_Model_Occu(nn.Module):
         out = self.encode(volume)
         out = out.view(out.shape[0],-1)
         out = self.decode(torch.cat((torch.repeat_interleave(out, int(coords.shape[0]/volume.shape[0]), dim=0), coords), dim=1))
-        print("Activation Model", torch.sum(out).item()) # See if activated
+        #print("Activation Model", torch.sum(out).item()) # See if activated
         return out
     
