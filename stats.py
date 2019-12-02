@@ -32,11 +32,8 @@ class Statistics(object):
         # Init class balance variable
         class_balance = 0.0
         # Itt over dataset
-        for volume, coordinates, label, label_n in self.dataset:
-            print(volume.shape)
-            print(coordinates.shape)
-            print(label.shape)
-            print(label_n.shape)
+        for blub in self.dataset:
+            print(blub)
             exit(42)
             # Get number of pixels belonging to gun class
             pixels_gun = torch.sum((label == 1.0).float()).item()
