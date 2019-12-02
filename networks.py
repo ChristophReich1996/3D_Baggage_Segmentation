@@ -30,7 +30,16 @@ class Network_Generator():
 
 
     def test(self, test_dataset):
-        raise NotImplementedError
+        def write_obj(self, index):
+            vol = self.__getitem__(index)[0].cpu().numpy()
+            maximum = np.max(vol)
+            with open('outfile_org.obj','w') as f:
+                for i in range(vol.shape[1]):
+                    for j in range(vol.shape[2]):
+                        for k in range(vol.shape[3]):
+                            color = utils.get_colour(vol[0][i][j][k], maximum)
+                            f.write("v " + " " + str(i) + " " + str(j) + " " + str(k) + 
+                                    " " + str(color[0]) + " " + str(color[1]) + " " + str(color[2]) + "\n")
         return 
 
     # Validate, ignore grads
@@ -118,7 +127,7 @@ class Res_Auto_3d_Model_Occu(nn.Module):
 
         self.encode = nn.Sequential(layers.Res_Block_Down_3D(1, 16, 3, 1, nn.SELU(), False),
                                     layers.Res_Block_Down_3D(16, 16, 3, 1, nn.SELU(), True),
-                                    layers.Res_Block_Down_3D(16, 32, 3, 1, nn.SELU(), False),
+                                    layers.Res_Block_Down_3D(16, 32, 3, 1, nn.SELU(), True),
                                     layers.Res_Block_Down_3D(32, 16, 3, 1, nn.SELU(), False),
                                     layers.Res_Block_Down_3D(16, 1, 3, 1, nn.SELU(), True))
 

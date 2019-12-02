@@ -10,24 +10,26 @@ import utils
 from pykdtree.kdtree import KDTree
 
 class WeaponDataset(data.Dataset):
-    def __init__(self, target_path, length, dim_max=640, npoints=2**10, side_len=32, sampling='one'):
+    def __init__(self, target_path, length, dim_max=640, npoints=2**10, side_len=32, sampling='one', offset=0):
         self.npoints = npoints
         self.side_len = side_len
         self.dim_max = int(dim_max / side_len)
         self.sampling = sampling
         self.target_path=target_path
         self.length = length
+        self.offset = offset
 
 
     def __getitem__(self, index):
        # t = utils.Timer()
+        index = index + self.offset
         try:
             volume_n = np.load(self.target_path +str(index) + ".npy")
             label_n = np.load(self.target_path +str(index) + "_label.npy")
         except:
             return self.__getitem__((index+1) % self.__len__())
 
-        sampling_shapes_tc = volume_n.shape
+        sampling_shapes_tc = volume_n.shape * self.side_len
 
         share_box=0.5
         if self.sampling == 'default':
@@ -134,7 +136,6 @@ class WeaponDatasetGenerator():
             print(index, "/",len(self.data))
             data_file = self.data[index]
             label_file = self.labels[index]
-            num_labels = 1
 
             # Check if label in place
             labels = itk.imread(label_file)
@@ -165,7 +166,6 @@ class WeaponDatasetGenerator():
 
             # Take care of labels and store coords
             labels_n = itk.GetArrayFromImage(labels)
-            labels_dims = labels_n.shape
 
             labels_indices_n = np.argwhere(labels_n)
             x_n = np.expand_dims(labels_indices_n[:, 0] + offsets_n[0], axis=1)
@@ -182,8 +182,6 @@ def many_to_one_collate_fn(batch):
     labels = torch.stack([elm[2] for elm in batch], dim=0).view(-1,1)
     
     return volumes, coords, labels
-
-
 
 
 if __name__ == '__main__':
