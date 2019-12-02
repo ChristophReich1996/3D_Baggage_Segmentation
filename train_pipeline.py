@@ -6,22 +6,23 @@ from data_interface import WeaponDataset, many_to_one_collate_fn
 
 
 
-number_device = 7
+#number_device = 7
 #print("GPU Used:", number_device)
 #torch.cuda.set_device(number_device)
 
 train_end = 2**10
 
 print("Load Datasets:", end = " ", flush=True)
-training_set = WeaponDataset(target_path="../../../../fastdata/Smiths_LKA_Weapons/len_32/train/",
+training_set = WeaponDataset(target_path="../../../../fastdata/Smiths_LKA_Weapons/len_16/",
                         npoints=2**14,
-                        side_len=32,
-                        length=200)
+                        side_len=16,
+                        length=2400)
 print("Training Set Completed" , end=" - ", flush=True)
-val_set = WeaponDataset(target_path="../../../../fastdata/Smiths_LKA_Weapons/len_32/train/",
+val_set = WeaponDataset(target_path="../../../../fastdata/Smiths_LKA_Weapons/len_16/",
                         npoints=2**14,
-                        side_len=32,
-                        length=20)
+                        side_len=16,
+                        length=200, 
+                        offset=2400)
 print("Validation Set Completed", flush=True)
 
 print("", flush=True)
