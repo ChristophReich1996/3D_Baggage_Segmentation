@@ -19,32 +19,34 @@ class WeaponDataset(data.Dataset):
         self.length = length
         self.offset = offset
         self.test=test
-        self.permutation = np.random.permutation(length) # To  make training more complicated
+        self.index_wrapper = utils.file_permutation()
 
 
     def __getitem__(self, index):
        # t = utils.Timer()
-
-        index = self.permutation[index]
         index = index + self.offset
+        index = self.index_wrapper[index]
         try:
             volume_n = np.load(self.target_path +str(index) + ".npy")
             label_n = np.load(self.target_path +str(index) + "_label.npy")
         except:
             return self.__getitem__((index+1) % self.__len__())
-
-        sampling_shapes_tc = volume_n.shape * self.side_len
+        sampling_shapes_tc = [0, volume_n.shape[1] * self.side_len, volume_n.shape[2] * self.side_len, volume_n.shape[2] * self.side_len]
         share_box=0.5
 
         if self.sampling == 'default':
-            # TODO kdtree
-            raise NotImplementedError
             # Mixed Coords
-            x_n = np.random.randint(sampling_shapes_tc[1], size=(int(self.npoints * (1-share_box)),1))
-            y_n = np.random.randint(sampling_shapes_tc[2], size=(int(self.npoints * (1-share_box)),1))
-            z_n = np.random.randint(sampling_shapes_tc[3], size=(int(self.npoints * (1-share_box)),1))
-            coords_zero = np.concatenate((x_n, y_n, z_n), axis = 1)
-        
+            x_n = np.random.randint(sampling_shapes_tc[1], size=(int(self.npoints),1))
+            y_n = np.random.randint(sampling_shapes_tc[2], size=(int(self.npoints),1))
+            z_n = np.random.randint(sampling_shapes_tc[3], size=(int(self.npoints),1))
+            coords_zero = np.concatenate((x_n, y_n, z_n), axis=1)
+            kd_tree = KDTree(label_n, leafsize=16)
+            dist, _ = kd_tree.query(coords_zero, k=1)
+            labels_zero = np.expand_dims(dist == 0, axis=1).astype(float)
+
+            coords = coords_zero
+            labels = labels_zero
+
         elif self.sampling == 'one_fast':
             # Coords with one as label
             coords_one = label_n[np.random.choice(label_n.shape[0], int(self.npoints * share_box), replace=False), :]
@@ -127,7 +129,7 @@ class WeaponDatasetGenerator():
         self.labels = [None] * len(self.data)
         # match data files with label files
         for i, d in enumerate(self.data):
-            name, extension = os.path.splitext(d)
+            name, _ = os.path.splitext(d)
             for l in mixed_labels:
                 if l.startswith(name):
                     self.labels[i] = l
@@ -200,8 +202,8 @@ def many_to_one_collate_fn_test(batch):
 
 if __name__ == '__main__':
     dataset_gen = WeaponDatasetGenerator(root="../../../projects_students/Smiths_LKA_Weapons/ctix-lka-20190503/",
-                        target_path="../../../../fastdata/Smiths_LKA_Weapons/len_16/",
-                        side_len=16)
+                        target_path="../../../../fastdata/Smiths_LKA_Weapons/len_1/",
+                        side_len=1)
 
     #dataset = WeaponDataset(target_path="../../../../fastdata/Smiths_LKA_Weapons/len_32/train/",
     #                    npoints=2**14,

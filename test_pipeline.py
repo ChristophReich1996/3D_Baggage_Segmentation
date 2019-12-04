@@ -14,11 +14,12 @@ train_end = 2**10
 
 print("Load Dataset:", end = " ", flush=True)
 test_set = WeaponDataset(target_path="../../../../fastdata/Smiths_LKA_Weapons/len_16/",
-                        npoints=2**14,
+                        npoints=2**16,
                         side_len=16,
                         length=200,
-                        offset=2600,
-                        test=True)
+                        offset=2400,
+                        test=True,
+                        sampling='default')
 print("Test Set Completed" , end=" - ", flush=True)
 
 
@@ -36,6 +37,7 @@ print("Completed", flush=True)
 print("", flush=True)
 
 print("Testing", flush=True)
-network.test(test_set, True)
+#network.draw(test_set, 16)
+print(network.test(test_set, True))
 
 

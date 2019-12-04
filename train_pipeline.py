@@ -16,21 +16,21 @@ print("Load Datasets:", end = " ", flush=True)
 training_set = WeaponDataset(target_path="../../../../fastdata/Smiths_LKA_Weapons/len_16/",
                         npoints=2**14,
                         side_len=16,
-                        length=2400)
+                        length=2700)
 print("Training Set Completed" , end=" - ", flush=True)
 val_set = WeaponDataset(target_path="../../../../fastdata/Smiths_LKA_Weapons/len_16/",
                         npoints=2**14,
                         side_len=16,
-                        length=200, 
-                        offset=2400)
+                        length=100, 
+                        offset=2700)
 print("Validation Set Completed", flush=True)
 
 print("", flush=True)
 print("Building Network", end=" ", flush=True)
 network = Network_Generator(rate_learn=1e-4, 
-                            size_batch=2**3, 
-                            size_iter=2**8, 
-                            size_print_every=2**5, 
+                            size_batch=2**4, 
+                            size_iter=2**10, 
+                            size_print_every=2**6, 
                             oj_loss=nn.MSELoss(reduction='mean'), 
                             optimizer=optim.Adam, 
                             oj_model=Res_Auto_3d_Model_Occu_Parallel().to(device), 
