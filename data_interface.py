@@ -29,8 +29,8 @@ class WeaponDataset(data.Dataset):
         index = self.permutation[index]
         index = index + self.offset
         try:
-            volume_n = np.load(self.target_path + str(index) + ".npy")
-            label_n = np.load(self.target_path + str(index) + "_label.npy")
+            volume_n = np.load(self.target_path + str(index) + ".npy", mmap_mode="r")
+            label_n = np.load(self.target_path + str(index) + "_label.npy", mmap_mode="r")
         except:
             return self.__getitem__((index + 1) % self.__len__())
 
