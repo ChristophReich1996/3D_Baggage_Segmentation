@@ -13,11 +13,11 @@ from data_interface import WeaponDataset, many_to_one_collate_fn_test
 train_end = 2**10
 
 print("Load Dataset:", end = " ", flush=True)
-test_set = WeaponDataset(target_path="../../../../fastdata/Smiths_LKA_Weapons/len_16/",
+test_set = WeaponDataset(target_path="../../../../fastdata/Smiths_LKA_Weapons/len_8/",
                         npoints=2**16,
-                        side_len=16,
-                        length=200,
-                        offset=2400,
+                        side_len=8,
+                        length=1,
+                        offset=2901,
                         test=True,
                         sampling='default')
 print("Test Set Completed" , end=" - ", flush=True)
@@ -37,7 +37,7 @@ print("Completed", flush=True)
 print("", flush=True)
 
 print("Testing", flush=True)
-#network.draw(test_set, 16)
-print(network.test(test_set, True))
-
-
+network.draw(test_set, 8)
+#print(network.test(test_set, True))
+model = Res_Auto_3d_Model_Occu_Parallel()
+#print(sum(p.numel() for p in model.parameters()))

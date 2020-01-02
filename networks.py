@@ -6,6 +6,7 @@ import numpy as np
 from torch.utils.data import TensorDataset, DataLoader
 import torchvision.transforms as transforms
 from pykdtree.kdtree import KDTree
+import functools
 
 
 import layers
@@ -107,30 +108,28 @@ class Network_Generator():
         return np.mean(np.array(losses_test_batch)), np.mean(np.array(precision_test_batch)), np.mean(np.array(recall_test_batch))
 
 
-    def draw(self, test_dataset, side_len):
+    def draw_v2(self, test_dataset, side_len):
         loader_test = DataLoader(dataset=test_dataset, batch_size=self._size_batch, pin_memory=False, shuffle=True, collate_fn=self._collate_fn)
         checkpoint = torch.load("model/"+ type(self._oj_model).__name__ + "_" + str(device) + ".pt", map_location=lambda storage, loc: storage)
         self._oj_model.load_state_dict(checkpoint)
         del checkpoint  # dereference seems crucial
         torch.cuda.empty_cache()
+        side_len_clean = side_len
 
         with torch.no_grad():
-            losses_test_batch = []
             for batch in loader_test:
                 self._oj_model.eval()
                 # Makes predictions ++++++++++++
-                volume, query_test, _, actual = batch
+                volume, coords, _, actual = batch
                 # Create initial query +++++++++
-                x = torch.range(0, volume.shape[2] - 1)
-                y = torch.range(0, volume.shape[3] - 1)
-                z = torch.range(0, volume.shape[4] - 1)
-
-                x = torch.repeat_interleave(x, volume.shape[3] * volume.shape[4])
-                y = torch.repeat_interleave(y, volume.shape[2] * volume.shape[4])
-                z = z.repeat(volume.shape[2] * volume.shape[3])
-
-                query = torch.cat((torch.unsqueeze(x, dim=1),torch.unsqueeze(y, dim=1),torch.unsqueeze(z, dim=1)), dim=1).to(device) * side_len
+                x = torch.arange(0, volume.shape[2])
+                y = torch.arange(0, volume.shape[3])
+                z = torch.arange(0, volume.shape[4])
+                x,y,z = torch.meshgrid(x,y,z)
+                query = torch.cat((torch.unsqueeze(x.reshape(-1), dim=1), torch.unsqueeze(y.reshape(-1), dim=1),  torch.unsqueeze(z.reshape(-1), dim=1)), dim=1)
+                query = query.float().to(device) * side_len
                 active = 1
+
                 to_write = np.empty((0, 3))
                 # Generate basic offsets
                 above = torch.FloatTensor([[0,0,1]]).to(device)
@@ -140,69 +139,240 @@ class Network_Generator():
                 behind = torch.FloatTensor([[1,0,0]]).to(device)
                 before = torch.FloatTensor([[-1,0,0]]).to(device)
                 # TODO catch negative values, no error, in best case network handles this
-                offsets = [above, below, left, right, behind, before]
+                offsets = [above, left, behind]
+                side_len -= 1
 
                 # Loop to refine grid ++++++++++
                 while active > 0 and side_len >= 1:
                     yhat = self._oj_model.inference(volume.to(device), query.to(device))
-                    hits = query[torch.squeeze(yhat) == 1]
-                    to_write = np.append(to_write, hits.cpu().numpy(), axis=0)
-
+                    hits = torch.squeeze(yhat)
+                    #print("Acitvation Test", torch.sum(yhat).item())
+                    locs = query[hits == 1]
+                    to_write = np.append(to_write, locs.cpu().numpy(), axis=0)
                     # Get scaled offsets to check for neighbours
                     offsets_s = [offset * side_len for offset in offsets]
-                    coords = [hits + offset for offset in offsets_s]
-                    acts = [self._oj_model.inference(volume.to(device), coord.to(device)) for coord in coords]
-                    sum_act = torch.stack(acts, dim=1).sum(dim=1)
 
-                    mask = torch.squeeze(nn.functional.threshold(sum_act, 5, 0))
-                    hits = hits[mask == 0]
-                    side_len /= 2
-                    offsets_s = [offset * side_len for offset in offsets]
-                    coords = [hits + offset for offset in offsets_s]
-                    query = torch.cat(coords, dim=0)
+                    coords = [locs + offset for offset in offsets_s]
+                    acts = [self._oj_model.inference(volume.to(device), coord.to(device)) for coord in coords]
+                    masks = [act == 1 for act in acts]
+                    for i, mask in enumerate(masks):
+                        current_coords = locs[torch.squeeze(mask)]
+
+                        if i == 0:
+                            add = above
+                        elif i ==1 :
+                            add = left
+                        elif  i==2:
+                            add = behind
+
+                        for i in range(side_len):
+                            to_write = np.append(to_write, (current_coords + add * (i+1)).cpu().numpy(), axis=0)
+                        
+                    side_len -= 2
+                    query = torch.empty((0,3)).to(device)
+                    masks_inv = [mask.logical_not() for mask in masks]
+
+                    for i, mask in enumerate(masks_inv):
+                        current_coords = locs[torch.squeeze(mask)]
+
+                        if i == 0:
+                            add = above
+                        elif i ==1 :
+                            add = left
+                        elif  i==2:
+                            add = behind
+
+                        query = torch.cat((query, current_coords + add), dim=0) 
+
                     active = query.shape[0]
                     
 
                 
 
-                    to_write = to_write.astype(np.short)
-                    # Only each 5th as meshlab crashes otherwise
-                    to_write_act = actual[::5,:].cpu().numpy().astype(np.short)
-                    with open('outfile_auto.obj','w') as f:
-                        for line in to_write:
-                            f.write("v " + " " + str(line[0]) + " " + str(line[1]) + " " + str(line[2]) + 
-                             " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
-                        for line in to_write_act:
-                            f.write("v " + " " + str(line[0]) + " " + str(line[1]) + " " + str(line[2]) + 
-                            " " + "0.5" + " " + "1.0" + " " + "0.5" + "\n")
-                             #Corners of volume
-                        f.write("v " + " " + "0"+ " " + "0" + " " + "0" + 
-                            " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+                to_write = to_write.astype(np.short)
+                # Only each 5th as meshlab crashes otherwise
+                to_write_act = actual[::10,:].cpu().numpy().astype(np.short)
+                with open('outfile_auto.obj','w') as f:
+                    for line in to_write:
+                        f.write("v " + " " + str(line[0]) + " " + str(line[1]) + " " + str(line[2]) + 
+                            " " + "0.0" + " " + "0.0" + " " + "0.5  " + "\n")
+                    f.write("v " + " " + "0"+ " " + "0" + " " + "0" + 
+                        " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
 
-                        f.write("v " + " " + str(volume.shape[2] * side_len)+  " " + "0" + " " + "0" + 
-                            " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
-                        
-                        f.write("v " + " " + str(volume.shape[2] * side_len) +  " " + str(volume.shape[3] * side_len) + " " + "0" + 
-                            " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+                    f.write("v " + " " + str(volume.shape[2] * side_len_clean)+  " " + "0" + " " + "0" + 
+                        " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
                     
-                        f.write("v " + " " + "0" +  " " + str(volume.shape[3] * side_len) + " " + "0" + 
-                            " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+                    f.write("v " + " " + str(volume.shape[2] * side_len_clean) +  " " + str(volume.shape[3] * side_len_clean) + " " + "0" + 
+                        " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+                
+                    f.write("v " + " " + "0" +  " " + str(volume.shape[3] * side_len_clean) + " " + "0" + 
+                        " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
 
-                        f.write("v " + " " + "0"+ " " + "0" + " " + str(volume.shape[4] * side_len) + 
-                            " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+                    f.write("v " + " " + "0"+ " " + "0" + " " + str(volume.shape[4] * side_len_clean) + 
+                        " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
 
-                        f.write("v " + " " + str(volume.shape[2] * side_len)+  " " + "0" + " " + str(volume.shape[4] * side_len) + 
-                            " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
-                        
-                        f.write("v " + " " + str(volume.shape[2] * side_len) +  " " + str(volume.shape[3] * side_len) + " " + str(volume.shape[4] * side_len)+ 
-                            " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+                    f.write("v " + " " + str(volume.shape[2] * side_len_clean)+  " " + "0" + " " + str(volume.shape[4] * side_len_clean) + 
+                        " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
                     
-                        f.write("v " + " " + "0" +  " " + str(volume.shape[3] * side_len) + " " + str(volume.shape[4] * side_len) + 
-                            " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")           
+                    f.write("v " + " " + str(volume.shape[2] * side_len_clean) +  " " + str(volume.shape[3] * side_len_clean) + " " + str(volume.shape[4] * side_len_clean)+ 
+                        " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+                
+                    f.write("v " + " " + "0" +  " " + str(volume.shape[3] * side_len_clean) + " " + str(volume.shape[4] * side_len_clean) + 
+                        " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")           
         
-        #TODO for all batches not only last one
+                with open('outfile_auto_org.obj','w') as f:
+                    for line in to_write_act:
+                        f.write("v " + " " + str(line[0]) + " " + str(line[1]) + " " + str(line[2]) + 
+                        " " + "1.0" + " " + "0.0" + " " + "0.0" + "\n")
+                            #Corners of volume
+                    f.write("v " + " " + "0"+ " " + "0" + " " + "0" + 
+                        " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+
+                    f.write("v " + " " + str(volume.shape[2] * side_len_clean)+  " " + "0" + " " + "0" + 
+                        " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+                    
+                    f.write("v " + " " + str(volume.shape[2] * side_len_clean) +  " " + str(volume.shape[3] * side_len_clean) + " " + "0" + 
+                        " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+                
+                    f.write("v " + " " + "0" +  " " + str(volume.shape[3] * side_len_clean) + " " + "0" + 
+                        " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+
+                    f.write("v " + " " + "0"+ " " + "0" + " " + str(volume.shape[4] * side_len_clean) + 
+                        " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+
+                    f.write("v " + " " + str(volume.shape[2] * side_len_clean)+  " " + "0" + " " + str(volume.shape[4] * side_len_clean) + 
+                        " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+                    
+                    f.write("v " + " " + str(volume.shape[2] * side_len_clean) +  " " + str(volume.shape[3] * side_len_clean) + " " + str(volume.shape[4] * side_len_clean)+ 
+                        " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+                
+                    f.write("v " + " " + "0" +  " " + str(volume.shape[3] * side_len_clean) + " " + str(volume.shape[4] * side_len_clean) + 
+                        " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")  
         return 0
 
+    def draw(self, test_dataset, side_len):
+        loader_test = DataLoader(dataset=test_dataset, batch_size=self._size_batch, pin_memory=False, shuffle=True, collate_fn=self._collate_fn)
+        checkpoint = torch.load("model/"+ type(self._oj_model).__name__ + "_" + str(device) + ".pt", map_location=lambda storage, loc: storage)
+        self._oj_model.load_state_dict(checkpoint)
+        del checkpoint  # dereference seems crucial
+        torch.cuda.empty_cache()
+        side_len_clean = side_len
+
+        with torch.no_grad():
+            for batch in loader_test:
+                self._oj_model.eval()
+                # Makes predictions ++++++++++++
+                volume, coords, _, actual = batch
+                # Create initial query +++++++++
+                x = torch.arange(0, volume.shape[2])
+                y = torch.arange(0, volume.shape[3])
+                z = torch.arange(0, volume.shape[4])
+                x,y,z = torch.meshgrid(x,y,z)
+                query = torch.cat((torch.unsqueeze(x.reshape(-1), dim=1), torch.unsqueeze(y.reshape(-1), dim=1),  torch.unsqueeze(z.reshape(-1), dim=1)), dim=1)
+                query = query.float().to(device) * side_len
+                active = 1
+
+                to_write = np.empty((0, 3))
+                # Generate basic offsets
+                neutral = torch.FloatTensor([[0,0,0]]).to(device)
+                above = torch.FloatTensor([[0,0,1]]).to(device)
+                left = torch.FloatTensor([[0,1,0]]).to(device)
+                behind = torch.FloatTensor([[1,0,0]]).to(device)
+                # TODO catch negative values, no error, in best case network handles this
+                offsets = [left, behind, left+behind, neutral+above, above+left, above+behind, above+left+behind]
+                #side_len -= 1
+
+                # Loop to refine grid ++++++++++
+                while active > 0 and side_len >= 1:
+                    print(active)
+                    # Get scaled offsets to check for neighbours
+                    offsets_s = [neutral] + [torch.relu(offset * side_len - 1) for offset in offsets]
+                    coords = [query + offset for offset in offsets_s]
+                    acts = [self._oj_model.inference(volume.to(device), coord.to(device)) for coord in coords]
+                    masks = [act == 1 for act in acts]
+                    sum_masks = functools.reduce(lambda a,b : a & b, masks)
+                    sum_masks_inv = functools.reduce(lambda a,b : a.logical_not() & b.logical_not(), masks)
+                    next_query_mask = torch.squeeze((sum_masks | sum_masks_inv).logical_not())
+                    mask_full = torch.squeeze(sum_masks)
+                    query_to_write = query[mask_full]
+
+                    for i in range(side_len):
+                        for j in range(side_len):
+                            for k in range(side_len):
+                                to_write = np.append(to_write, (query_to_write + left * i + above * j + behind * k).cpu().numpy(), axis=0)
+
+                    side_len = int(side_len/2)
+                    query_next = query[next_query_mask]
+                    query = torch.empty((0,3)).to(device)
+                    
+                    for offset in [neutral] + offsets:
+                        query = torch.cat((query, query_next + offset * side_len), dim=0)
+
+                    active = query.shape[0]
+                    
+
+                
+
+                to_write = to_write.astype(np.short)
+                # Only each 5th as meshlab crashes otherwise
+                to_write_act = actual[::10,:].cpu().numpy().astype(np.short)
+                with open('outfile_auto.obj','w') as f:
+                    for line in to_write:
+                        f.write("v " + " " + str(line[0]) + " " + str(line[1]) + " " + str(line[2]) + 
+                            " " + "0.0" + " " + "0.0" + " " + "0.5  " + "\n")
+                    f.write("v " + " " + "0"+ " " + "0" + " " + "0" + 
+                        " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+
+                    f.write("v " + " " + str(volume.shape[2] * side_len_clean)+  " " + "0" + " " + "0" + 
+                        " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+                    
+                    f.write("v " + " " + str(volume.shape[2] * side_len_clean) +  " " + str(volume.shape[3] * side_len_clean) + " " + "0" + 
+                        " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+                
+                    f.write("v " + " " + "0" +  " " + str(volume.shape[3] * side_len_clean) + " " + "0" + 
+                        " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+
+                    f.write("v " + " " + "0"+ " " + "0" + " " + str(volume.shape[4] * side_len_clean) + 
+                        " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+
+                    f.write("v " + " " + str(volume.shape[2] * side_len_clean)+  " " + "0" + " " + str(volume.shape[4] * side_len_clean) + 
+                        " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+                    
+                    f.write("v " + " " + str(volume.shape[2] * side_len_clean) +  " " + str(volume.shape[3] * side_len_clean) + " " + str(volume.shape[4] * side_len_clean)+ 
+                        " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+                
+                    f.write("v " + " " + "0" +  " " + str(volume.shape[3] * side_len_clean) + " " + str(volume.shape[4] * side_len_clean) + 
+                        " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")           
+        
+                with open('outfile_auto_org.obj','w') as f:
+                    for line in to_write_act:
+                        f.write("v " + " " + str(line[0]) + " " + str(line[1]) + " " + str(line[2]) + 
+                        " " + "1.0" + " " + "0.0" + " " + "0.0" + "\n")
+                            #Corners of volume
+                    f.write("v " + " " + "0"+ " " + "0" + " " + "0" + 
+                        " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+
+                    f.write("v " + " " + str(volume.shape[2] * side_len_clean)+  " " + "0" + " " + "0" + 
+                        " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+                    
+                    f.write("v " + " " + str(volume.shape[2] * side_len_clean) +  " " + str(volume.shape[3] * side_len_clean) + " " + "0" + 
+                        " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+                
+                    f.write("v " + " " + "0" +  " " + str(volume.shape[3] * side_len_clean) + " " + "0" + 
+                        " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+
+                    f.write("v " + " " + "0"+ " " + "0" + " " + str(volume.shape[4] * side_len_clean) + 
+                        " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+
+                    f.write("v " + " " + str(volume.shape[2] * side_len_clean)+  " " + "0" + " " + str(volume.shape[4] * side_len_clean) + 
+                        " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+                    
+                    f.write("v " + " " + str(volume.shape[2] * side_len_clean) +  " " + str(volume.shape[3] * side_len_clean) + " " + str(volume.shape[4] * side_len_clean)+ 
+                        " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+                
+                    f.write("v " + " " + "0" +  " " + str(volume.shape[3] * side_len_clean) + " " + str(volume.shape[4] * side_len_clean) + 
+                        " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")  
+        return 0
 
     # Validate, ignore grads
     def _val(self, loader_val, losses_val):
@@ -284,20 +454,22 @@ class Res_Auto_3d_Model_Occu_Parallel(nn.Module):
         return self.model(volume, coords)
 
     def inference(self, volume, coords):
-        return (torch.sign(self.forward(volume, coords) - 0.8) + 1) / 2
+        return (torch.sign(self.forward(volume, coords) - 0.99) + 1) / 2
 
 class Res_Auto_3d_Model_Occu(nn.Module):
     def __init__(self):
         super(Res_Auto_3d_Model_Occu,self).__init__()
 
-        self.encode = nn.Sequential(layers.Res_Block_Down_3D(1, 16, 3, 1, nn.SELU(), False),
-                                    layers.Res_Block_Down_3D(16, 16, 3, 1, nn.SELU(), True),
-                                    layers.Res_Block_Down_3D(16, 32, 3, 1, nn.SELU(), True),
-                                    layers.Res_Block_Down_3D(32, 16, 3, 1, nn.SELU(), False),
-                                    layers.Res_Block_Down_3D(16, 1, 3, 1, nn.SELU(), True))
+        self.encode = nn.Sequential(layers.Res_Block_Down_3D(1, 64, 3, 1, nn.SELU(), False),
+                                    layers.Res_Block_Down_3D(64, 64, 3, 1, nn.SELU(), True),
+                                    layers.Res_Block_Down_3D(64, 64, 3, 1, nn.SELU(), True),
+                                    layers.Res_Block_Down_3D(64, 64, 3, 1, nn.SELU(), True),
+                                    layers.Res_Block_Down_3D(64, 1, 3, 1, nn.SELU(), True))
 
-        self.decode = nn.Sequential(layers.Res_Block_Up_Flat(60 + 3, 128, nn.SELU()),
-                                    layers.Res_Block_Up_Flat(128, 256, nn.SELU()),
+        self.decode = nn.Sequential(layers.Res_Block_Up_Flat(60 + 3, 256, nn.SELU()),
+                                    layers.Res_Block_Up_Flat(256, 256, nn.SELU()),
+                                    layers.Res_Block_Up_Flat(256, 256, nn.SELU()),
+                                    layers.Res_Block_Up_Flat(256, 256, nn.SELU()),
                                     layers.Res_Block_Up_Flat(256, 128, nn.SELU()),
                                     layers.Res_Block_Up_Flat(128, 1, nn.Sigmoid()))
 

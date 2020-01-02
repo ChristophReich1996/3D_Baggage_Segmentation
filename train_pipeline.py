@@ -13,14 +13,14 @@ from data_interface import WeaponDataset, many_to_one_collate_fn
 train_end = 2**10
 
 print("Load Datasets:", end = " ", flush=True)
-training_set = WeaponDataset(target_path="../../../../fastdata/Smiths_LKA_Weapons/len_16/",
+training_set = WeaponDataset(target_path="../../../../fastdata/Smiths_LKA_Weapons/len_8/",
                         npoints=2**14,
-                        side_len=16,
+                        side_len=8,
                         length=2700)
 print("Training Set Completed" , end=" - ", flush=True)
-val_set = WeaponDataset(target_path="../../../../fastdata/Smiths_LKA_Weapons/len_16/",
+val_set = WeaponDataset(target_path="../../../../fastdata/Smiths_LKA_Weapons/len_8/",
                         npoints=2**14,
-                        side_len=16,
+                        side_len=8,
                         length=100, 
                         offset=2700)
 print("Validation Set Completed", flush=True)

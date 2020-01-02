@@ -27,11 +27,13 @@ class WeaponDataset(data.Dataset):
         index = index + self.offset
         index = self.index_wrapper[index]
         try:
-            volume_n = np.load(self.target_path +str(index) + ".npy")
-            label_n = np.load(self.target_path +str(index) + "_label.npy")
-        except:
+            volume_n = np.load(self.target_path + str(index) + ".npy")
+            label_n = np.load(self.target_path + str(index) + "_label.npy")
+        except Exception as e:
+            print(e)
             return self.__getitem__((index+1) % self.__len__())
-        sampling_shapes_tc = [0, volume_n.shape[1] * self.side_len, volume_n.shape[2] * self.side_len, volume_n.shape[2] * self.side_len]
+        
+        sampling_shapes_tc = [0, volume_n.shape[1] * self.side_len, volume_n.shape[2] * self.side_len, volume_n.shape[3] * self.side_len]
         share_box=0.5
 
         if self.sampling == 'default':
@@ -105,7 +107,7 @@ class WeaponDataset(data.Dataset):
 
 
 class WeaponDatasetGenerator():
-    def __init__(self, root, target_path,start_index=0, end_index=-1, threshold_min=0, threshold_max=30000, 
+    def __init__(self, root, target_path,start_index=0, end_index=-1, threshold_min=0, threshold_max=50000, 
                 dim_max=640, side_len=16):
         self.threshold_min = threshold_min
         self.threshold_max = threshold_max
@@ -134,7 +136,7 @@ class WeaponDatasetGenerator():
                 if l.startswith(name):
                     self.labels[i] = l
                     break
-
+        print(self.data[600], self.labels[600])
         self.data = self.data[start_index:end_index]
         self.labels = self.labels[start_index:end_index]
         print("File paths", t1.stop())
@@ -202,15 +204,15 @@ def many_to_one_collate_fn_test(batch):
 
 if __name__ == '__main__':
     dataset_gen = WeaponDatasetGenerator(root="../../../projects_students/Smiths_LKA_Weapons/ctix-lka-20190503/",
-                        target_path="../../../../fastdata/Smiths_LKA_Weapons/len_1/",
-                        side_len=1)
+                        target_path="../../../../fastdata/Smiths_LKA_Weapons/len_8/",
+                        side_len=8)
 
     #dataset = WeaponDataset(target_path="../../../../fastdata/Smiths_LKA_Weapons/len_32/train/",
     #                    npoints=2**14,
     #                    length=1,
     #                    side_len=32)
 
-    dataset_gen.generate_data()
+    #dataset_gen.generate_data()
     #dataset.write_obj(0)
     #dataloader = torch.utils.data.DataLoader(dataset, batch_size=1, shuffle=True, collate_fn=many_to_one_collate_fn, num_workers=8)
     #print(len(dataset))
