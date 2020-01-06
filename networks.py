@@ -107,7 +107,6 @@ class Network_Generator():
         
         return np.mean(np.array(losses_test_batch)), np.mean(np.array(precision_test_batch)), np.mean(np.array(recall_test_batch))
 
-
     def draw_v2(self, test_dataset, side_len):
         loader_test = DataLoader(dataset=test_dataset, batch_size=self._size_batch, pin_memory=False, shuffle=True, collate_fn=self._collate_fn)
         checkpoint = torch.load("model/"+ type(self._oj_model).__name__ + "_" + str(device) + ".pt", map_location=lambda storage, loc: storage)
@@ -453,8 +452,23 @@ class Res_Auto_3d_Model_Occu_Parallel(nn.Module):
     def forward(self, volume, coords):
         return self.model(volume, coords)
 
+    def bounding_box(self, volume, side_len):
+        x = torch.arange(0, volume.shape[1])
+        y = torch.arange(0, volume.shape[2])
+        z = torch.arange(0, volume.shape[3])
+        x,y,z = torch.meshgrid(x,y,z)
+        query = torch.cat((torch.unsqueeze(x.reshape(-1), dim=1), torch.unsqueeze(y.reshape(-1), dim=1),  torch.unsqueeze(z.reshape(-1), dim=1)), dim=1)
+        query = query.float().to(device) * side_len
+        volume = torch.unsqueeze(volume, dim=1).float()
+        mask = torch.squeeze(self.inference(volume, query) == 1)
+        hits = query[mask]
+
+        maxes = torch.max(hits, dim=0)[0].int()
+        mines = torch.min(hits, dim=0)[0].int()
+        return mines[0].item(), maxes[0].item(), mines[1].item(), maxes[1].item(), mines[2].item(), maxes[2].item()
+
     def inference(self, volume, coords):
-        return (torch.sign(self.forward(volume, coords) - 0.99) + 1) / 2
+        return (torch.sign(self.forward(volume, coords) - 0.95) + 1) / 2
 
 class Res_Auto_3d_Model_Occu(nn.Module):
     def __init__(self):
@@ -464,9 +478,9 @@ class Res_Auto_3d_Model_Occu(nn.Module):
                                     layers.Res_Block_Down_3D(64, 64, 3, 1, nn.SELU(), True),
                                     layers.Res_Block_Down_3D(64, 64, 3, 1, nn.SELU(), True),
                                     layers.Res_Block_Down_3D(64, 64, 3, 1, nn.SELU(), True),
-                                    layers.Res_Block_Down_3D(64, 1, 3, 1, nn.SELU(), True))
+                                    layers.Res_Block_Down_3D(64, 3, 3, 1, nn.SELU(), True))
 
-        self.decode = nn.Sequential(layers.Res_Block_Up_Flat(60 + 3, 256, nn.SELU()),
+        self.decode = nn.Sequential(layers.Res_Block_Up_Flat(180 + 3, 256, nn.SELU()),
                                     layers.Res_Block_Up_Flat(256, 256, nn.SELU()),
                                     layers.Res_Block_Up_Flat(256, 256, nn.SELU()),
                                     layers.Res_Block_Up_Flat(256, 256, nn.SELU()),
@@ -477,6 +491,5 @@ class Res_Auto_3d_Model_Occu(nn.Module):
         out = self.encode(volume)
         out = out.view(out.shape[0],-1)
         out = self.decode(torch.cat((torch.repeat_interleave(out, int(coords.shape[0]/volume.shape[0]), dim=0), coords), dim=1))
-        #print("Activation Model", torch.sum(out).item()) # See if activated
         return out
     

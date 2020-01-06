@@ -17,7 +17,7 @@ test_set = WeaponDataset(target_path="../../../../fastdata/Smiths_LKA_Weapons/le
                         npoints=2**16,
                         side_len=8,
                         length=1,
-                        offset=2901,
+                        offset=2802,
                         test=True,
                         sampling='default')
 print("Test Set Completed" , end=" - ", flush=True)

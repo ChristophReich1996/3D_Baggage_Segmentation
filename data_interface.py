@@ -8,6 +8,7 @@ import itk
 from config import device
 import utils
 from pykdtree.kdtree import KDTree
+from networks import *
 
 class WeaponDataset(data.Dataset):
     def __init__(self, target_path, length, dim_max=640, npoints=2**10, side_len=32, sampling='one', offset=0, test=False):
@@ -95,15 +96,24 @@ class WeaponDataset(data.Dataset):
     def write_obj(self, index):
         vol = self.__getitem__(index)[0].cpu().numpy()
         maximum = np.max(vol)
+        vol = vol/maximum
+        vol[vol - 0.15 < 0] = 0
+
+
         with open('outfile_org.obj','w') as f:
             for i in range(vol.shape[1]):
                 for j in range(vol.shape[2]):
                     for k in range(vol.shape[3]):
-                        color = utils.get_colour(vol[0][i][j][k], maximum)
-                        f.write("v " + " " + str(i) + " " + str(j) + " " + str(k) + 
-                                " " + str(color[0]) + " " + str(color[1]) + " " + str(color[2]) + "\n")
-
-                
+                        color = vol[0][i][j][k]
+                        if color == 0:
+                            continue
+                        f.write("v " + " " + str(i * self.side_len) + " " + str(j * self.side_len) + " " + str(k * self.side_len) + 
+                                " " + str(color) + " " + str(0.5) + " " + str(0.5) + "\n")
+        with open('outfile_labels.obj','w') as f:
+            label = self.__getitem__(index)[3].cpu().numpy()
+            for i in range(label.shape[0]):
+                        f.write("v " + " " + str(label[i][0]) + " " + str(label[i][1]) + " " + str(label[i][2]) + 
+                                " " + str(0) + " " + str(0) + " " + str(1) + "\n")
 
 
 class WeaponDatasetGenerator():
@@ -136,7 +146,6 @@ class WeaponDatasetGenerator():
                 if l.startswith(name):
                     self.labels[i] = l
                     break
-        print(self.data[600], self.labels[600])
         self.data = self.data[start_index:end_index]
         self.labels = self.labels[start_index:end_index]
         print("File paths", t1.stop())
@@ -166,7 +175,7 @@ class WeaponDatasetGenerator():
             print("Read image", t2.stop())
 
             t3 = utils.Timer()
-            volume_pooled_tg = nn.functional.max_pool3d(torch.from_numpy(volume_n).to(device), self.side_len, self.side_len)
+            volume_pooled_tg = nn.functional.avg_pool3d(torch.from_numpy(volume_n).to(device), self.side_len, self.side_len)
             print("Downsampling", t3.stop())
             t4 = utils.Timer()
             volume_pooled_tg = volume_pooled_tg[:,0:self.dim_max,:,:]
@@ -183,9 +192,92 @@ class WeaponDatasetGenerator():
             y_n = np.expand_dims(labels_indices_n[:, 1] + offsets_n[1], axis=1)
             z_n = np.expand_dims(labels_indices_n[:, 2] + offsets_n[2], axis=1)
             np.save(self.target_path +str(index) + "_label.npy", np.concatenate((x_n,y_n,z_n), axis=1).astype(np.uint16))
+    
+
+class BoundedDatasetGenerator():
+    def __init__(self, root, target_path,start_index=0, end_index=-1, threshold_min=0, threshold_max=50000, 
+                dim_max=640, side_len=16):
+        self.threshold_min = threshold_min
+        self.threshold_max = threshold_max
+        self.side_len = side_len
+        self.dim_max = int(dim_max / side_len)
+        self.target_path=target_path
+
+        self.data = []
+        mixed_labels = []
+        t1 = utils.Timer()
+        for direc, _, files in os.walk(root):
+            for file in files:
+                if file.endswith(".mha"):
+                    if "label" in file:
+                        # label annotation file
+                        mixed_labels.append(os.path.join(direc,file))
+                    else:
+                        # regular data file
+                        self.data.append(os.path.join(direc,file))
+
+        self.labels = [None] * len(self.data)
+        # match data files with label files
+        for i, d in enumerate(self.data):
+            name, _ = os.path.splitext(d)
+            for l in mixed_labels:
+                if l.startswith(name):
+                    self.labels[i] = l
+                    break
+        self.data = self.data[start_index:end_index]
+        self.labels = self.labels[start_index:end_index]
+        print("File paths", t1.stop())
 
 
-        
+    def generate_data(self, model_name):
+        model = Res_Auto_3d_Model_Occu_Parallel().to(device)
+        checkpoint = torch.load("model/"+ model_name, map_location=lambda storage, loc: storage)
+        model.load_state_dict(checkpoint)
+        del checkpoint  # dereference seems crucial
+        torch.cuda.empty_cache()     
+
+        for index in range(len(self.data)):
+            print(index, "/",len(self.data), flush=True)
+            data_file = self.data[index]
+            label_file = self.labels[index]
+
+            # Check if label in place
+            labels = itk.imread(label_file)
+            try:
+                offsets_n = np.flip(np.array(labels.GetMetaDataDictionary()["DomainFirst"].split(" "), dtype=np.int), 0)
+            except:
+                continue
+            # load data using itk
+            t2 = utils.Timer()
+            # First take care of volume
+            image = itk.imread(data_file)
+
+            volume_n = itk.GetArrayFromImage(image)
+            volume_n = (volume_n - self.threshold_min).astype(np.float) / float(self.threshold_max - self.threshold_min)
+            volume_n = np.expand_dims(volume_n, axis = 0) 
+
+            print("Read image", t2.stop())
+
+            t3 = utils.Timer()
+            volume_t = torch.from_numpy(volume_n).to(device)
+            t3 = utils.Timer()
+            volume_pooled_tg = nn.functional.avg_pool3d(volume_t, self.side_len, self.side_len)
+            print("Downsampling", t3.stop())
+            t4 = utils.Timer()
+            volume_pooled_tg = volume_pooled_tg[:,0:self.dim_max,:,:]
+            volume_pooled_tg = nn.functional.pad(volume_pooled_tg, 
+                                                            (0,0,0,0,0,self.dim_max-volume_pooled_tg.shape[1]))
+
+
+            box = model.bounding_box(volume_pooled_tg, self.side_len)
+            start_vol = volume_pooled_tg.shape[1] * volume_pooled_tg.shape[2] * volume_pooled_tg.shape[3] * self.side_len**3
+            volume_t = volume_t[:, box[0]:box[1], box[2]:box[3], box[4]:box[5]]
+            end_vol = volume_t.shape[1] * volume_t.shape[2] * volume_t.shape[3]
+            print("Reduction %6.4f" % (1 - end_vol/start_vol), flush=True)
+            print("Bound", t3.stop())
+
+            np.save(self.target_path +str(index) + ".npy", volume_t.cpu().numpy().astype(np.float32))
+    
 
 def many_to_one_collate_fn(batch):
     volumes = torch.stack([elm[0] for elm in batch], dim=0)
@@ -203,17 +295,23 @@ def many_to_one_collate_fn_test(batch):
 
 
 if __name__ == '__main__':
+    """
     dataset_gen = WeaponDatasetGenerator(root="../../../projects_students/Smiths_LKA_Weapons/ctix-lka-20190503/",
                         target_path="../../../../fastdata/Smiths_LKA_Weapons/len_8/",
                         side_len=8)
+    
+    dataset = WeaponDataset(target_path="../../../../fastdata/Smiths_LKA_Weapons/len_8/",
+                        npoints=2**14,
+                        length=2000,
+                        side_len=8,
+                        test=True)
+    """
+    dataset_gen = BoundedDatasetGenerator(root="../../../projects_students/Smiths_LKA_Weapons/ctix-lka-20190503/",
+                        target_path="../../../../fastdata/Smiths_LKA_Weapons/bounded/",
+                        side_len=8)
+    dataset_gen.generate_data("Res_Auto_3d_Model_Occu_Parallel_cuda.pt")
 
-    #dataset = WeaponDataset(target_path="../../../../fastdata/Smiths_LKA_Weapons/len_32/train/",
-    #                    npoints=2**14,
-    #                    length=1,
-    #                    side_len=32)
-
-    #dataset_gen.generate_data()
-    #dataset.write_obj(0)
+    # dataset.write_obj(0)
     #dataloader = torch.utils.data.DataLoader(dataset, batch_size=1, shuffle=True, collate_fn=many_to_one_collate_fn, num_workers=8)
     #print(len(dataset))
     #for full, coords, labels in dataloader:
