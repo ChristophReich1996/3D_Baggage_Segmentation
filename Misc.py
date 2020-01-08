@@ -44,7 +44,7 @@ def get_normalization_3d(normalization: str, channels: int) -> nn.Sequential():
         raise RuntimeError('Normalization {} is not available!'.format(normalization))
 
 
-def get_downsampling_3d(downsampling: str, factor: str = 2, channels: int = 0) -> nn.Sequential():
+def get_downsampling_3d(downsampling: str, factor: int = 2, channels: int = 0) -> nn.Sequential:
     """
     Method to return different types of downsampling operations
     :param downsampling: (str) Type of donwsnapling ('maxpool', 'averagepool', 'convolution')
