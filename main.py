@@ -9,4 +9,5 @@ import Dataset
 import ModelWrapper
 
 if __name__ == '__main__':
-    pass
+    ONet = Model.OccupancyNetwork()
+    torchsummary.summary(ONet, input_size=[(1, 64, 64, 64), (1, 183)], device='cpu')

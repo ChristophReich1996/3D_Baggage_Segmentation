@@ -5,9 +5,9 @@ import torch.nn.functional as F
 import Misc
 
 
-class VolumeDecoderBlock(nn.Module):
+class VolumeEncoderBlock(nn.Module):
     """
-    Basic Volume Decoder Block
+    Basic Volume Encoder Block
     (convolution + normalization + activation) -> (convolution + normalization + activation) -> (downsampling)
     """
 
@@ -30,7 +30,7 @@ class VolumeDecoderBlock(nn.Module):
         :param bias: (bool) True to use bias in convolution operations
         """
         # Call super constructor
-        super(VolumeDecoderBlock, self).__init__()
+        super(VolumeEncoderBlock, self).__init__()
         # Save dropout rate
         self.dropout_rate = dropout_rate
         # Init activations
