@@ -29,7 +29,7 @@ def get_activation(activation: str) -> nn.Sequential:
 
 def get_normalization_3d(normalization: str, channels: int) -> nn.Sequential():
     """
-    Method to return different types of normalization operations
+    Method to return different types of 3D normalization operations
     :param normalization: (str) Type of normalization ('batchnorm', 'instancenorm')
     :param channels: (int) Number of channels to use
     :return: (nn.Sequential) Normalization operation
@@ -44,9 +44,26 @@ def get_normalization_3d(normalization: str, channels: int) -> nn.Sequential():
         raise RuntimeError('Normalization {} is not available!'.format(normalization))
 
 
+def get_normalization_1d(normalization: str, channels: int) -> nn.Sequential():
+    """
+    Method to return different types of 1D normalization operations
+    :param normalization: (str) Type of normalization ('batchnorm', 'instancenorm')
+    :param channels: (int) Number of channels to use
+    :return: (nn.Sequential) Normalization operation
+    """
+    assert normalization in ['batchnorm', 'instancenorm'], \
+        'Normalization {} is not available!'.format(normalization)
+    if normalization == 'batchnorm':
+        return nn.Sequential(nn.BatchNorm1d(channels))
+    elif normalization == 'instancenorm':
+        return nn.Sequential(nn.InstanceNorm1d(channels))
+    else:
+        raise RuntimeError('Normalization {} is not available!'.format(normalization))
+
+
 def get_downsampling_3d(downsampling: str, factor: int = 2, channels: int = 0) -> nn.Sequential:
     """
-    Method to return different types of downsampling operations
+    Method to return different types of 3D downsampling operations
     :param downsampling: (str) Type of donwsnapling ('maxpool', 'averagepool', 'convolution')
     :param factor: (int) Factor of downsampling
     :param channels: (int) Number of channels (only for convolution)
