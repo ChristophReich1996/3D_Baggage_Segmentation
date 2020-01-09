@@ -29,7 +29,7 @@ def get_activation(activation: str) -> nn.Sequential:
         raise RuntimeError('Activation {} is not available!'.format(activation))
 
 
-def get_normalization_3d(normalization: str, channels: int) -> nn.Sequential():
+def get_normalization_3d(normalization: str, channels: int) -> nn.Sequential:
     """
     Method to return different types of 3D normalization operations
     :param normalization: (str) Type of normalization ('batchnorm', 'instancenorm')
@@ -46,7 +46,7 @@ def get_normalization_3d(normalization: str, channels: int) -> nn.Sequential():
         raise RuntimeError('Normalization {} is not available!'.format(normalization))
 
 
-def get_normalization_1d(normalization: str, channels: int) -> nn.Sequential():
+def get_normalization_1d(normalization: str, channels: int) -> nn.Sequential:
     """
     Method to return different types of 1D normalization operations
     :param normalization: (str) Type of normalization ('batchnorm', 'instancenorm')
