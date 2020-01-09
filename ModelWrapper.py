@@ -13,7 +13,7 @@ class OccupancyNetworkWrapper(object):
     def __init__(self, occupancy_network: nn.Module, occupancy_network_optimizer: torch.optim.Optimizer,
                  training_data: torch.utils.data.dataloader, validation_data: torch.utils.data.dataloader,
                  test_data: torch.utils.data.dataloader, loss_function: Callable[[torch.tensor], torch.tensor],
-                 device: str = 'cuda', batch_size: int = 2**2, collate_fn: Callable[torch.tensor]) -> None:
+                 collate_fn: Callable[torch.tensor], device: str = 'cuda', batch_size: int = 2**2) -> None:
         """
         Class constructor
         :param occupancy_network: (nn.Module) Occupancy network for binary segmentation
