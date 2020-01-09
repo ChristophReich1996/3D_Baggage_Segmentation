@@ -1,8 +1,9 @@
-from typing import Callable
+from typing import Callable, Dict, List
 
 import torch
 import torch.nn as nn
 import torch.utils.data.dataloader
+from datetime import datetime
 
 
 class OccupancyNetworkWrapper(object):
@@ -32,17 +33,46 @@ class OccupancyNetworkWrapper(object):
         self.test_data = test_data
         self.loss_function = loss_function
         self.device = device
+        # Init dict for evaluation metrics
+        self.metrics = dict()
 
-    def train(self):
+    def train(self) -> None:
         """
         Training method
-        :return:
         """
         raise NotImplementedError()
 
-    def test(self):
+    def test(self) -> None:
         """
         Testing method
-        :return:
         """
         raise NotImplementedError()
+
+    def logging(self, metric_name: str, value: float) -> None:
+        """
+        Method writes a given metric value into a dict including list for every metric
+        :param metric_name: (str) Name of the metric
+        :param value: (float) Value of the metric
+        """
+        if metric_name in self.metrics:
+            self.metrics[metric_name].append(value)
+        else:
+            self.metrics[metric_name] = [value]
+
+    @staticmethod
+    def save_metrics(metrics: Dict[str, List[float]], path: str, add_time_to_file_name: bool = False) -> None:
+        """
+        Static method to save dict of metrics
+        :param metrics: (Dict[str, List[float]]) Dict including metrics
+        :param path: (str) Path to save metrics
+        :param add_time_to_file_name: (bool) True if time has to be added to filename of every metric
+        """
+        # Iterate items in metrics dict
+        for metric_name, values in metrics.items():
+            # Convert list of values to torch tensor to use build in save method from torch
+            values = torch.tensor(values)
+            # Save values
+            if add_time_to_file_name:
+                torch.save(values, path + '/' + metric_name + '_' + datetime.now().strftime("%H:%M:%S") + '.pt')
+            else:
+                torch.save(values, path + '/' + metric_name + '.pt')
