@@ -3,10 +3,12 @@ from typing import Callable, Dict, List
 import numpy as np
 import torch
 import torch.nn as nn
-import torch.utils.data.dataloader
+from tqdm import tqdm
+from torch.utils.data.dataloader import DataLoader
 from datetime import datetime
 from pykdtree.kdtree import KDTree
 from torchsummary import summary
+
 
 class OccupancyNetworkWrapper(object):
     """
@@ -15,8 +17,8 @@ class OccupancyNetworkWrapper(object):
 
     def __init__(self, occupancy_network: nn.Module, occupancy_network_optimizer: torch.optim.Optimizer,
                  training_data: torch.utils.data.dataloader, validation_data: torch.utils.data.dataloader,
-                 test_data: torch.utils.data.dataloader, loss_function: Callable[[torch.tensor], torch.tensor],
-                 collate_fn: Callable[torch.tensor], device: str = 'cuda', batch_size: int = 2**2) -> None:
+                 test_data: torch.utils.data.dataloader,
+                 loss_function: Callable[[torch.tensor, torch.tensor], torch.tensor], device: str = 'cuda') -> None:
         """
         Class constructor
         :param occupancy_network: (nn.Module) Occupancy network for binary segmentation
@@ -30,74 +32,54 @@ class OccupancyNetworkWrapper(object):
         # Init class variables
         self.occupancy_network = occupancy_network
         self.occupancy_network_optimizer = occupancy_network_optimizer
+        self.training_data = training_data
+        self.validation_data = validation_data
+        self.test_data = test_data
         self.loss_function = loss_function
         self.device = device
-        self.batch_size = batch_size
-        self.collate_fn = collate_fn
-
-        # Better pass to train function
-        # self.training_data = training_data
-        # self.validation_data = validation_data
-        # self.test_data = test_data
-
-    def train(self, training_data, validation_data, load=False) -> None:
-        """
-        Training method
-        :param training_data: (torch.tensor) Training Set
-        :param validation_data: (torch.tensor) Validation Set
-        :param load: (Bool) Determine whether or not model should be loaded from disk
-        :return:
-        """
-        # Init dict for evaluation metrics
         self.metrics = dict()
 
-        # Function vars ++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-        loss_best = float('inf')
-        losses_train = []
-        losses_val = []
-        loader_train = DataLoader(dataset=training_data, batch_size=self.batch_size, pin_memory=True, shuffle=True, collate_fn=self.collate_fn)
-        loader_val = DataLoader(dataset=validation_data, batch_size=self.batch_size, pin_memory=True, shuffle=True, collate_fn=self.collate_fn)
-        
-        if load:
-            self.occupancy_network.load_state_dict(torch.load( "model/"+ type(self.occupancy_network).__name__ + "_" + str(device) + ".pt"))
-            self.occupancy_network_optimizer.load_state_dict(torch.load( "optimizer/"+ type(self.occupancy_network).__name__ + "_" + str(device) + ".pt"))
+    def train(self, epochs: int = 100, save_best_model: bool = True, model_save_path: str = '') -> None:
+        """
+        Training loop
+        :param epochs: (int) Number of epochs to perform
+        """
+        # Model into train mode
+        self.occupancy_network.train()
+        # Init progress bar
+        progress_bar = tqdm(total=epochs * len(self.training_data))
+        # Init best loss variable
+        best_loss = np.inf
+        # Perform training
+        for epoch in range(epochs):
+            for volumes, coordinates, labels in self.training_data:
+                # Update progress bar
+                progress_bar.update(volumes.shape[0])
+                # Reset gradients
+                self.occupancy_network.zero_grad()
+                # Data to device
+                volumes = volumes.to(self.device)
+                coordinates = coordinates.to(self.device)
+                labels = labels.to(self.device)
+                # Perform model prediction
+                prediction = self.occupancy_network(volumes, coordinates)
+                # Compute loss
+                loss = self.loss_function(prediction, labels)
+                # Compute gradients
+                loss.backward()
+                # Update parameters
+                self.occupancy_network_optimizer.step()
+                # Update loss info in progress bar
+                progress_bar.set_description('Epoch {}/{}, Loss={:.4f}'.format(epoch + 1, epoch + 1, loss.item()))
+                # Save loss value and current epoch
+                self.logging(metric_name='loss', value=loss.item())
+                self.logging(metric_name='epoch', value=epoch)
 
-        # Auxiliary functions ++++++++++++++++++++++++++++++++++++++++++++++++++
-        # Make a training step
-        def _step_train(batch):
-            volume, coords, labels = batch
-            self.occupancy_network.train()
-            yhat = self.occupancy_network(volume.to(device), coords.to(device))
-            loss_train = self.loss_function(yhat, labels.to(device))
-            loss_train.backward()
-            self.occupancy_network_optimizer.step()
-            self.occupancy_network_optimizer.zero_grad()
-            return loss_train.item()
-
-
-        # Logic ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-        for _ in range(self._size_iter):
-
-            losses_train_batch = []
-            for i, batch in enumerate(loader_train):
-            
-                # One step of training
-                loss_train_batch = _step_train(batch)
-                if i % 4 == 3:
-                    print("Training Loss Batch", i, loss_train_batch,flush=True)
-
-                if i % self._size_print_every == self._size_print_every-1:
-                    loss_val = self._val(loader_val, losses_val)
-                    print("Validation Loss", loss_val)
-
-                    if loss_val < loss_best:
-                        loss_best = loss_val
-                        torch.save(self.occupancy_network.state_dict(), "model/"+ type(self.occupancy_network).__name__ + "_" + str(device) + ".pt")
-                        torch.save(self.occupancy_network_optimizer.state_dict(), "optimizer/"+ type(self.occupancy_network).__name__ + "_" + str(device) + ".pt")
-
-            loss_train = np.mean(losses_train_batch)
-            losses_train.append(loss_train)
-            print("Training Loss Iteration", loss_train,flush=True)
+            average_loss = self.get_average_metric_for_epoch(metric_name='loss', epoch=epoch)
+            if save_best_model and (best_loss > average_loss):
+                torch.save(self.occupancy_network,
+                           model_save_path + '/occupancy_network_' + self.device + '_loss_' + str(
+                               average_loss) + '_epoch_' + str(epoch) + '.pt')
 
     def test(self, test_dataset, draw=True, side_len=16) -> (np.array, np.array, np.array):
         """
@@ -109,8 +91,10 @@ class OccupancyNetworkWrapper(object):
         """
         # TODO only working with batchsize 1 currently (actual labels)
 
-        loader_test = DataLoader(dataset=test_dataset, batch_size=self.batch_size, pin_memory=False, shuffle=True, collate_fn=self.collate_fn)
-        checkpoint = torch.load("model/"+ type(self.occupancy_network).__name__ + "_" + str(device) + ".pt", map_location=lambda storage, loc: storage)
+        loader_test = DataLoader(dataset=test_dataset, batch_size=self.batch_size, pin_memory=False, shuffle=True,
+                                 collate_fn=self.collate_fn)
+        checkpoint = torch.load("model/" + type(self.occupancy_network).__name__ + "_" + str(device) + ".pt",
+                                map_location=lambda storage, loc: storage)
         self.occupancy_network.load_state_dict(checkpoint)
         del checkpoint  # dereference seems crucial
         torch.cuda.empty_cache()
@@ -125,64 +109,70 @@ class OccupancyNetworkWrapper(object):
                 volume, coords, labels, actual = batch
                 yhat = self.occupancy_network.inference(volume.to(device), coords.to(device))
                 hits = torch.squeeze(yhat)
-                #print("Activation Test", torch.sum(yhat).item())
+                # print("Activation Test", torch.sum(yhat).item())
                 locs = coords[hits == 1]
                 if draw:
                     to_write = locs.cpu().numpy().astype(np.short)
                     # Only each 10th as meshlab crashes otherwise
-                    to_write_act = actual[::10,:].cpu().numpy().astype(np.short)
-                    #mean (shape) centering
-                    mean = np.array([volume.shape[2] * side_len/2, volume.shape[3] * side_len/2, volume.shape[4] * side_len/2])
+                    to_write_act = actual[::10, :].cpu().numpy().astype(np.short)
+                    # mean (shape) centering
+                    mean = np.array([volume.shape[2] * side_len / 2, volume.shape[3] * side_len / 2,
+                                     volume.shape[4] * side_len / 2])
                     to_write_act = to_write_act - mean
-                    to_write = to_write - mean# np.mean(to_write, axis=0)
+                    to_write = to_write - mean  # np.mean(to_write, axis=0)
 
-                    with open('outfile_auto.obj','w') as f:
+                    with open('outfile_auto.obj', 'w') as f:
                         for line in to_write:
-                            f.write("v " + " " + str(line[0]) + " " + str(line[1]) + " " + str(line[2]) + 
-                             " " + "0.5" + " " + "0.5" + " " + "1.0" + "\n")
+                            f.write("v " + " " + str(line[0]) + " " + str(line[1]) + " " + str(line[2]) +
+                                    " " + "0.5" + " " + "0.5" + " " + "1.0" + "\n")
                         for line in to_write_act:
-                            f.write("v " + " " + str(line[0]) + " " + str(line[1]) + " " + str(line[2]) + 
-                            " " + "0.19" + " " + "0.8" + " " + "0.19" + "\n")
+                            f.write("v " + " " + str(line[0]) + " " + str(line[1]) + " " + str(line[2]) +
+                                    " " + "0.19" + " " + "0.8" + " " + "0.19" + "\n")
 
-                        #Corners of volume
-                        f.write("v " + " " + "0"+ " " + "0" + " " + "0" + 
-                            " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+                        # Corners of volume
+                        f.write("v " + " " + "0" + " " + "0" + " " + "0" +
+                                " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
 
-                        f.write("v " + " " + str(volume.shape[2] * side_len)+  " " + "0" + " " + "0" + 
-                            " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
-                        
-                        f.write("v " + " " + str(volume.shape[2] * side_len) +  " " + str(volume.shape[3] * side_len) + " " + "0" + 
-                            " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
-                    
-                        f.write("v " + " " + "0" +  " " + str(volume.shape[3] * side_len) + " " + "0" + 
-                            " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+                        f.write("v " + " " + str(volume.shape[2] * side_len) + " " + "0" + " " + "0" +
+                                " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
 
-                        f.write("v " + " " + "0"+ " " + "0" + " " + str(volume.shape[4] * side_len) + 
-                            " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+                        f.write("v " + " " + str(volume.shape[2] * side_len) + " " + str(
+                            volume.shape[3] * side_len) + " " + "0" +
+                                " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
 
-                        f.write("v " + " " + str(volume.shape[2] * side_len)+  " " + "0" + " " + str(volume.shape[4] * side_len) + 
-                            " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
-                        
-                        f.write("v " + " " + str(volume.shape[2] * side_len) +  " " + str(volume.shape[3] * side_len) + " " + str(volume.shape[4] * side_len)+ 
-                            " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
-                    
-                        f.write("v " + " " + "0" +  " " + str(volume.shape[3] * side_len) + " " + str(volume.shape[4] * side_len) + 
-                            " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+                        f.write("v " + " " + "0" + " " + str(volume.shape[3] * side_len) + " " + "0" +
+                                " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+
+                        f.write("v " + " " + "0" + " " + "0" + " " + str(volume.shape[4] * side_len) +
+                                " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+
+                        f.write("v " + " " + str(volume.shape[2] * side_len) + " " + "0" + " " + str(
+                            volume.shape[4] * side_len) +
+                                " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+
+                        f.write("v " + " " + str(volume.shape[2] * side_len) + " " + str(
+                            volume.shape[3] * side_len) + " " + str(volume.shape[4] * side_len) +
+                                " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+
+                        f.write("v " + " " + "0" + " " + str(volume.shape[3] * side_len) + " " + str(
+                            volume.shape[4] * side_len) +
+                                " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
 
                 kd_tree = KDTree(actual.cpu().numpy(), leafsize=16)
                 dist, _ = kd_tree.query(locs.cpu().numpy(), k=1)
                 union = np.sum(dist == 0)
-                precision = union/locs.shape[0]
-                recall = union/actual.shape[0]
+                precision = union / locs.shape[0]
+                recall = union / actual.shape[0]
                 loss_test_batch = self.loss_function(yhat, labels.to(device)).item()
                 losses_test_batch.append(loss_test_batch)
                 precision_test_batch.append(precision)
                 recall_test_batch.append(recall)
-        
+
         # TODO: check input size, dynamic
         summary(self.occupancy_network, input_size=(80, 52, 77))
 
-        return np.mean(np.array(losses_test_batch)), np.mean(np.array(precision_test_batch)), np.mean(np.array(recall_test_batch))
+        return np.mean(np.array(losses_test_batch)), np.mean(np.array(precision_test_batch)), np.mean(
+            np.array(recall_test_batch))
 
     def logging(self, metric_name: str, value: float) -> None:
         """
@@ -194,6 +184,20 @@ class OccupancyNetworkWrapper(object):
             self.metrics[metric_name].append(value)
         else:
             self.metrics[metric_name] = [value]
+
+    def get_average_metric_for_epoch(self, metric_name: str, epoch: int) -> float:
+        """
+        Method calculates the average of a metric for a given epoch
+        :param metric_name: (str) Name of the metric
+        :param epoch: (int) Epoch to average over
+        :return: (float) Average metric
+        """
+        # Convert lists to np.array
+        metric = np.array(self.metrics[metric_name])
+        epochs = np.array(self.metrics['epoch'])
+        # Calc mean
+        metric_average = np.mean(metric[np.argwhere(epochs == epoch)])
+        return metric_average
 
     @staticmethod
     def save_metrics(metrics: Dict[str, List[float]], path: str, add_time_to_file_name: bool = False) -> None:
