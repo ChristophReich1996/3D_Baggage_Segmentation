@@ -1,10 +1,12 @@
 from typing import Callable, Dict, List
 
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.utils.data.dataloader
 from datetime import datetime
-
+from pykdtree.kdtree import KDTree
+from torchsummary import summary
 
 class OccupancyNetworkWrapper(object):
     """
@@ -48,7 +50,7 @@ class OccupancyNetworkWrapper(object):
         """
         # Init dict for evaluation metrics
         self.metrics = dict()
-        
+
         # Function vars ++++++++++++++++++++++++++++++++++++++++++++++++++++++++
         loss_best = float('inf')
         losses_train = []
@@ -97,11 +99,90 @@ class OccupancyNetworkWrapper(object):
             losses_train.append(loss_train)
             print("Training Loss Iteration", loss_train,flush=True)
 
-    def test(self) -> None:
+    def test(self, test_dataset, draw=True, side_len=16) -> (np.array, np.array, np.array):
         """
         Testing method
+        :param test_dataset: (torch.tensor) Test Set
+        :param draw: (Bool) Draw result to file
+        :param side_len: (int) Side length
+        :return: (np.array) Mean losses test batch, (np.array) Mean precision test batch, (np.array) Mean recall test batch
         """
-        raise NotImplementedError()
+        # TODO only working with batchsize 1 currently (actual labels)
+
+        loader_test = DataLoader(dataset=test_dataset, batch_size=self.batch_size, pin_memory=False, shuffle=True, collate_fn=self.collate_fn)
+        checkpoint = torch.load("model/"+ type(self.occupancy_network).__name__ + "_" + str(device) + ".pt", map_location=lambda storage, loc: storage)
+        self.occupancy_network.load_state_dict(checkpoint)
+        del checkpoint  # dereference seems crucial
+        torch.cuda.empty_cache()
+
+        with torch.no_grad():
+            losses_test_batch = []
+            precision_test_batch = []
+            recall_test_batch = []
+            for batch in loader_test:
+                self.occupancy_network.eval()
+                # Makes predictions
+                volume, coords, labels, actual = batch
+                yhat = self.occupancy_network.inference(volume.to(device), coords.to(device))
+                hits = torch.squeeze(yhat)
+                #print("Activation Test", torch.sum(yhat).item())
+                locs = coords[hits == 1]
+                if draw:
+                    to_write = locs.cpu().numpy().astype(np.short)
+                    # Only each 10th as meshlab crashes otherwise
+                    to_write_act = actual[::10,:].cpu().numpy().astype(np.short)
+                    #mean (shape) centering
+                    mean = np.array([volume.shape[2] * side_len/2, volume.shape[3] * side_len/2, volume.shape[4] * side_len/2])
+                    to_write_act = to_write_act - mean
+                    to_write = to_write - mean# np.mean(to_write, axis=0)
+
+                    with open('outfile_auto.obj','w') as f:
+                        for line in to_write:
+                            f.write("v " + " " + str(line[0]) + " " + str(line[1]) + " " + str(line[2]) + 
+                             " " + "0.5" + " " + "0.5" + " " + "1.0" + "\n")
+                        for line in to_write_act:
+                            f.write("v " + " " + str(line[0]) + " " + str(line[1]) + " " + str(line[2]) + 
+                            " " + "0.19" + " " + "0.8" + " " + "0.19" + "\n")
+
+                        #Corners of volume
+                        f.write("v " + " " + "0"+ " " + "0" + " " + "0" + 
+                            " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+
+                        f.write("v " + " " + str(volume.shape[2] * side_len)+  " " + "0" + " " + "0" + 
+                            " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+                        
+                        f.write("v " + " " + str(volume.shape[2] * side_len) +  " " + str(volume.shape[3] * side_len) + " " + "0" + 
+                            " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+                    
+                        f.write("v " + " " + "0" +  " " + str(volume.shape[3] * side_len) + " " + "0" + 
+                            " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+
+                        f.write("v " + " " + "0"+ " " + "0" + " " + str(volume.shape[4] * side_len) + 
+                            " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+
+                        f.write("v " + " " + str(volume.shape[2] * side_len)+  " " + "0" + " " + str(volume.shape[4] * side_len) + 
+                            " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+                        
+                        f.write("v " + " " + str(volume.shape[2] * side_len) +  " " + str(volume.shape[3] * side_len) + " " + str(volume.shape[4] * side_len)+ 
+                            " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+                    
+                        f.write("v " + " " + "0" +  " " + str(volume.shape[3] * side_len) + " " + str(volume.shape[4] * side_len) + 
+                            " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+
+                kd_tree = KDTree(actual.cpu().numpy(), leafsize=16)
+                dist, _ = kd_tree.query(locs.cpu().numpy(), k=1)
+                union = np.sum(dist == 0)
+                precision = union/locs.shape[0]
+                recall = union/actual.shape[0]
+                loss_test_batch = self.loss_function(yhat, labels.to(device)).item()
+                losses_test_batch.append(loss_test_batch)
+                precision_test_batch.append(precision)
+                recall_test_batch.append(recall)
+        
+        # TODO: check input size, dynamic
+        summary(self.occupancy_network, input_size=(80, 52, 77))
+
+        return np.mean(np.array(losses_test_batch)), np.mean(np.array(precision_test_batch)), np.mean(np.array(recall_test_batch))
 
     def logging(self, metric_name: str, value: float) -> None:
         """
