@@ -73,7 +73,7 @@ class VolumeEncoderBlock(nn.Module):
 
 class CoordinatesFullyConnectedBlock(nn.Module):
     """
-    Implementation of a fully connected residual block occupancy coordinates
+    Implementation of a fully connected residual block for occupancy coordinates
     (linear + normalization + activation) -> (linear + normalization + activation) -> (residual mapping of input)
     """
 
