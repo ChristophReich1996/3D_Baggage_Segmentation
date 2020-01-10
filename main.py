@@ -1,4 +1,5 @@
 import torch
+from torch.nn import BCELoss
 import torchsummary
 import numpy as np
 import matplotlib.pyplot as plt
@@ -9,4 +10,15 @@ import Datasets
 import ModelWrapper
 
 if __name__ == '__main__':
-    ONet = Models.OccupancyNetwork()
+    model = Models.OccupancyNetwork()
+    ModelWrapper.OccupancyNetworkWrapper(occupancy_network=model,
+                                         occupancy_network_optimizer=torch.optim.Adam(model.parameters(),lr=1e-05),
+                                         training_data=Datasets.WeaponDataset(
+                                                target_path="../../../../fastdata/Smiths_LKA_Weapons/len_8/",
+                                                npoints=2**14,
+                                                side_len=8,
+                                                length=2600),
+                                         validation_data=None,
+                                         test_data=None,
+                                         loss_function=BCELoss(reduction='mean')
+                                         ).train(epochs=2)
