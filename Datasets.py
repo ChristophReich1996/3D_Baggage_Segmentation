@@ -1,3 +1,5 @@
+from typing import Tuple
+
 import torch
 from torch.utils import data
 import numpy as np
@@ -8,7 +10,18 @@ import Misc
 
 class WeaponDataset(data.Dataset):
     def __init__(self, target_path: str, length: int, dim_max: int = 640, npoints: int = 2 ** 10, side_len: int = 32,
-                 sampling: str = 'one', offset: int = 0, test: bool = False):
+                 sampling: str = 'one', offset: int = 0, test: bool = False) -> None:
+        """
+        Constructor method
+        :param target_path: (str)
+        :param length: (int)
+        :param dim_max: (int)
+        :param npoints: (int)
+        :param side_len: (int)
+        :param sampling: (str)
+        :param offset: (int)
+        :param test: (bool)
+        """
         self.npoints = npoints
         self.side_len = side_len
         self.dim_max = int(dim_max / side_len)
@@ -19,7 +32,12 @@ class WeaponDataset(data.Dataset):
         self.test = test
         self.index_wrapper = Misc.FilePermutation()
 
-    def __getitem__(self, index):
+    def __getitem__(self, index: int) -> Tuple[torch.tensor]:
+        """
+        Getter method
+        :param index: (int) Index
+        :return: (Tuple[torch.tensor]) Batch of volume, coordinates and label
+        """
         # Calc index
         index = index + self.offset
         index = self.index_wrapper[index]
@@ -84,12 +102,24 @@ class WeaponDataset(data.Dataset):
                 labels).float()
 
     def __len__(self) -> int:
+        """
+        Returns the length of the whole dataset
+        :return: (int) Length of the dataset
+        """
         return self.length
 
-    def get_side_len(self):
+    def get_side_len(self) -> int:
+        """
+        ?????
+        :return: (int)
+        """
         return self.side_len
 
-    def write_obj(self, index):
+    def write_obj(self, index: int) -> None:
+        """
+        ???
+        :param index: (int) Index
+        """
         vol = self.__getitem__(index)[0].cpu().numpy()
         maximum = np.max(vol)
         vol = vol / maximum

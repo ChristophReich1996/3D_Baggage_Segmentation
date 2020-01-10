@@ -30,7 +30,7 @@ class OccupancyNetworkWrapper(object):
         :param device: (str) Device to use while training, validation and testing
         """
         # Init class variables
-        self.occupancy_network = occupancy_network
+        self.occupancy_network = occupancy_network.to(device)
         self.occupancy_network_optimizer = occupancy_network_optimizer
         self.training_data = training_data
         self.validation_data = validation_data
