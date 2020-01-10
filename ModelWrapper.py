@@ -48,6 +48,7 @@ class OccupancyNetworkWrapper(object):
         """
         # Model into train mode
         self.occupancy_network.train()
+        self.occupancy_network.to(self.device)
         # Init progress bar
         progress_bar = tqdm(total=epochs * len(self.training_data))
         # Init best loss variable
@@ -60,7 +61,7 @@ class OccupancyNetworkWrapper(object):
                 # Reset gradients
                 self.occupancy_network.zero_grad()
                 # Data to device
-                volumes = volumes.to(self.device)
+                volumes = volumes.to(self.device).unsqueeze_(0)
                 coordinates = coordinates.to(self.device)
                 labels = labels.to(self.device)
                 # Perform model prediction
