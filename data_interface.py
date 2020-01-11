@@ -9,6 +9,7 @@ from config import device
 import utils
 from pykdtree.kdtree import KDTree
 from networks import *
+import random
 
 class WeaponDataset(data.Dataset):
     def __init__(self, target_path, length, dim_max=640, npoints=2**10, side_len=32, sampling='one', offset=0, test=False):
@@ -97,9 +98,9 @@ class WeaponDataset(data.Dataset):
         vol = self.__getitem__(index)[0].cpu().numpy()
         maximum = np.max(vol)
         vol = vol/maximum
-        vol[vol - 0.15 < 0] = 0
+        vol[vol - 0.00 < 0] = 0
 
-
+        print(vol.shape)
         with open('outfile_org.obj','w') as f:
             for i in range(vol.shape[1]):
                 for j in range(vol.shape[2]):
@@ -115,7 +116,54 @@ class WeaponDataset(data.Dataset):
                         f.write("v " + " " + str(label[i][0]) + " " + str(label[i][1]) + " " + str(label[i][2]) + 
                                 " " + str(0) + " " + str(0) + " " + str(1) + "\n")
 
+class WeaponDatasetHighRes(data.Dataset):
+    def __init__(self, target_path, length, dim_max=640, offset=0):
+        self.target_path=target_path
+        self.length = length
+        self.offset = offset
+        self.index_wrapper = utils.file_permutation()
 
+    def __getitem__(self, index):
+       # t = utils.Timer()
+        index = index + self.offset
+        index = self.index_wrapper[index]
+        try:
+            volume_n = np.load(self.target_path + str(index) + ".npy")
+            label_n = np.load(self.target_path + str(index) + "_label.npy")
+        except Exception as e:
+            return self.__getitem__((index+1) % self.__len__())
+
+        return volume_n.astype(np.float), label_n.astype(int).astype(np.float)
+
+    def __len__(self):
+        return self.length
+
+    def get_side_len(self):
+        return self.side_len
+
+    def write_obj(self, index):
+        instance = self.__getitem__(index)
+        vol = instance[0]
+        maximum = np.max(vol)
+        vol = vol/maximum
+        vol[vol - 0.15 < 0] = 0
+        with open('outfile_org.obj','w') as f:
+            for i in range(vol.shape[1]):
+                for j in range(vol.shape[2]):
+                    for k in range(vol.shape[3]):
+                        color = vol[0][i][j][k]
+                        if color == 0:
+                            continue
+                        f.write("v " + " " + str(i) + " " + str(j) + " " + str(k) + 
+                                " " + str(color) + " " + str(0.5) + " " + str(0.5) + "\n")
+
+        with open('outfile_labels.obj','w') as f:
+            label = instance[1]
+            for i in range(label.shape[0]):
+                        f.write("v " + " " + str(label[i][0]) + " " + str(label[i][1]) + " " + str(label[i][2]) + 
+                                " " + str(0) + " " + str(0) + " " + str(1) + "\n")
+
+        sample(np.expand_dims(instance[0],axis=0), instance[1], side_len=32)
 class WeaponDatasetGenerator():
     def __init__(self, root, target_path,start_index=0, end_index=-1, threshold_min=0, threshold_max=50000, 
                 dim_max=640, side_len=16):
@@ -153,7 +201,7 @@ class WeaponDatasetGenerator():
 
     def generate_data(self):
         for index in range(len(self.data)):
-            print(index, "/",len(self.data))
+            print(index, "/",len(self.data), flush=True)
             data_file = self.data[index]
             label_file = self.labels[index]
 
@@ -172,26 +220,33 @@ class WeaponDatasetGenerator():
             volume_n = (volume_n - self.threshold_min).astype(np.float) / float(self.threshold_max - self.threshold_min)
             volume_n = np.expand_dims(volume_n, axis = 0) 
 
-            print("Read image", t2.stop())
-
-            t3 = utils.Timer()
-            volume_pooled_tg = nn.functional.avg_pool3d(torch.from_numpy(volume_n).to(device), self.side_len, self.side_len)
-            print("Downsampling", t3.stop())
-            t4 = utils.Timer()
-            volume_pooled_tg = volume_pooled_tg[:,0:self.dim_max,:,:]
-            volume_pooled_tg = nn.functional.pad(volume_pooled_tg, 
-                                                            (0,0,0,0,0,self.dim_max-volume_pooled_tg.shape[1]))
-            print("Padding", t4.stop())
-            np.save(self.target_path +str(index) + ".npy", volume_pooled_tg.cpu().numpy().astype(np.float32))
-
-            # Take care of labels and store coords
             labels_n = itk.GetArrayFromImage(labels)
-
             labels_indices_n = np.argwhere(labels_n)
             x_n = np.expand_dims(labels_indices_n[:, 0] + offsets_n[0], axis=1)
             y_n = np.expand_dims(labels_indices_n[:, 1] + offsets_n[1], axis=1)
-            z_n = np.expand_dims(labels_indices_n[:, 2] + offsets_n[2], axis=1)
-            np.save(self.target_path +str(index) + "_label.npy", np.concatenate((x_n,y_n,z_n), axis=1).astype(np.uint16))
+            z_n = np.expand_dims(labels_indices_n[:, 2] + offsets_n[2], axis=1)  
+            coords = np.concatenate((x_n,y_n,z_n), axis=1).astype(np.uint16)          
+            
+            max_x, max_y, max_z = np.max(coords, axis=0)
+            min_x, min_y, min_z = np.min(coords, axis=0)
+            
+            offset=5
+            start_x = int(max(min_x-offset,0))
+            start_y = int(max(min_y-offset,0))
+            start_z = int(max(min_z-offset,0))
+
+            end_x = max_x+offset
+            end_y = max_y+offset
+            end_z = max_z+offset
+
+            volume_n = volume_n[:, start_x:end_x, start_y:end_y, start_z:end_z]
+
+            np.save(self.target_path +str(index) + ".npy", volume_n.astype(np.float32))
+
+            coords[:,0] -= start_x
+            coords[:,1] -= start_y
+            coords[:,2] -= start_z
+            np.save(self.target_path +str(index) + "_label.npy", coords)
     
 
 class BoundedDatasetGenerator():
@@ -278,18 +333,113 @@ class BoundedDatasetGenerator():
 
             np.save(self.target_path +str(index) + ".npy", volume_t.cpu().numpy().astype(np.float32))
     
+def sample(volume_n, label_n, npoints=2**10, side_len=32, sampling='one', test=False):
+        t1 = utils.Timer()
+        volume_n = np.squeeze(volume_n, axis=0)
+        sampling_shapes_tc = [0, volume_n.shape[1], volume_n.shape[2], volume_n.shape[3]]
+
+        x_start = int(np.random.randint(sampling_shapes_tc[1], size=(1)))
+        y_start = int(np.random.randint(sampling_shapes_tc[2], size=(1)))
+        z_start = int(np.random.randint(sampling_shapes_tc[3], size=(1)))  
+
+        x_end = x_start + side_len     
+        y_end = y_start + side_len     
+        z_end = z_start + side_len     
+        share_box=0.5
+
+        mask = (label_n[:,0] >= x_start) &  (label_n[:,0] < x_end) & (label_n[:,1] >= y_start) &  (label_n[:,1] < y_end) & (label_n[:,2] >= z_start) &  (label_n[:,2] < z_end)
+        label_n = label_n[mask]
+        label_n[:,0] -= x_start
+        label_n[:,1] -= y_start
+        label_n[:,2] -= z_start
+        volume_n = volume_n[:, x_start:x_end, y_start:y_end, z_start:z_end]
+        sampling_shapes_tc = [0, volume_n.shape[1], volume_n.shape[2], volume_n.shape[3]]
+        
+        if label_n.shape[0] > 0:
+            try:
+                coords_one = label_n[np.random.choice(label_n.shape[0], int(npoints * share_box), replace=False), :]
+            except Exception as e:
+                coords_one = label_n[np.random.choice(label_n.shape[0], int(npoints * share_box), replace=True), :]
+
+            # Mixed Coords
+            x_n = np.random.randint(sampling_shapes_tc[1], size=(int(npoints * (1-share_box)),1))
+            y_n = np.random.randint(sampling_shapes_tc[2], size=(int(npoints * (1-share_box)),1))
+            z_n = np.random.randint(sampling_shapes_tc[3], size=(int(npoints * (1-share_box)),1))
+            coords_zero = np.concatenate((x_n, y_n, z_n), axis=1).astype(np.float)
+            kd_tree = KDTree(label_n, leafsize=16)
+            dist, _ = kd_tree.query(coords_zero, k=1)
+            labels_zero = np.expand_dims(dist==0, axis=1).astype(float)
+
+            coords = np.concatenate((coords_one, coords_zero), axis=0)
+            labels = np.concatenate((np.ones((coords_one.shape[0], 1)), labels_zero), axis=0)
+
+         
+        else:
+            # Mixed Coords
+            x_n = np.random.randint(sampling_shapes_tc[1], size=(int(npoints),1))
+            y_n = np.random.randint(sampling_shapes_tc[2], size=(int(npoints),1))
+            z_n = np.random.randint(sampling_shapes_tc[3], size=(int(npoints),1))
+            coords_zero = np.concatenate((x_n, y_n, z_n), axis=1).astype(np.float)
+            labels_zero = np.zeros((coords_zero.shape[0], 1))
+
+            coords = coords_zero
+            labels = labels_zero
+            
+        """
+        to_write = label_n
+        to_write_labels = coords[(np.squeeze(labels)==1)]
+        # Only each 5th as meshlab crashes otherwise
+        with open('outfile_auto_true.obj','w') as f:
+            for line in to_write:
+                f.write("v " + " " + str(line[0]) + " " + str(line[1]) + " " + str(line[2]) + 
+                    " " + "0.0" + " " + "0.0" + " " + "0.5  " + "\n")         
+
+        with open('outfile_auto_labels.obj','w') as f:
+            for line in to_write_labels:
+                f.write("v " + " " + str(line[0]) + " " + str(line[1]) + " " + str(line[2]) + 
+                " " + "0.0" + " " + "1.0" + " " + "0.0" + "\n")
+
+
+        vol = volume_n
+        maximum = np.max(vol)
+        vol = vol/maximum
+        vol[vol - 0.15 < 0] = 0
+
+        with open('outfile_org.obj','w') as f:
+            for i in range(vol.shape[1]):
+                for j in range(vol.shape[2]):
+                    for k in range(vol.shape[3]):
+                        color = vol[0][i][j][k]
+                        if color == 0:
+                            continue
+                        f.write("v " + " " + str(i) + " " + str(j) + " " + str(k) + 
+                                " " + str(color) + " " + str(0.5) + " " + str(0.5) + "\n")    
+        """
+        volume_n = np.pad(volume_n, ((0,0),(0, max(side_len - sampling_shapes_tc[1],0)), (0, max(side_len - sampling_shapes_tc[2],0)), (0, max(side_len - sampling_shapes_tc[3],0))))
+        if  test:
+            out = torch.from_numpy(volume_n).float(), torch.from_numpy(coords).float(), torch.from_numpy(labels).float(), torch.from_numpy(label_n.astype(int)).float()
+        else:
+            out =  torch.from_numpy(volume_n).float(), torch.from_numpy(coords).float(), torch.from_numpy(labels).float()
+
+        return out
+
 
 def many_to_one_collate_fn(batch):
+    volumes = np.stack([elm[0] for elm in batch], axis=0)
+    labels = np.stack([elm[1] for elm in batch], axis=0).reshape(-1,3)
+    return volumes, labels
+
+def many_to_one_collate_fn_sample(batch):
     volumes = torch.stack([elm[0] for elm in batch], dim=0)
     coords = torch.stack([elm[1] for elm in batch], dim=0).view(-1,3)
     labels = torch.stack([elm[2] for elm in batch], dim=0).view(-1,1)
     return volumes, coords, labels
 
-def many_to_one_collate_fn_test(batch):
+def many_to_one_collate_fn_sample_test(batch):
     volumes = torch.stack([elm[0] for elm in batch], dim=0)
     coords = torch.stack([elm[1] for elm in batch], dim=0).view(-1,3)
     labels = torch.stack([elm[2] for elm in batch], dim=0).view(-1,1)
-    actual = torch.stack([elm[3] for elm in batch], dim=0).view(-1,3    )
+    actual = torch.stack([elm[3] for elm in batch], dim=0).view(-1,3)
     return volumes, coords, labels, actual
 
 
@@ -297,24 +447,30 @@ def many_to_one_collate_fn_test(batch):
 if __name__ == '__main__':
     """
     dataset_gen = WeaponDatasetGenerator(root="../../../projects_students/Smiths_LKA_Weapons/ctix-lka-20190503/",
-                        target_path="../../../../fastdata/Smiths_LKA_Weapons/len_8/",
-                        side_len=8)
-    
-    dataset = WeaponDataset(target_path="../../../../fastdata/Smiths_LKA_Weapons/len_8/",
-                        npoints=2**14,
-                        length=2000,
-                        side_len=8,
-                        test=True)
+                        target_path="../../../../fastdata/Smiths_LKA_Weapons/len_1/",
+                        side_len=1)
+    dataset_gen.generate_data()
+    """
+    dataset = WeaponDatasetHighRes(target_path="../../../../fastdata/Smiths_LKA_Weapons/len_1/",
+                        length=2000)
     """
     dataset_gen = BoundedDatasetGenerator(root="../../../projects_students/Smiths_LKA_Weapons/ctix-lka-20190503/",
                         target_path="../../../../fastdata/Smiths_LKA_Weapons/bounded/",
                         side_len=8)
     dataset_gen.generate_data("Res_Auto_3d_Model_Occu_Parallel_cuda.pt")
-
-    # dataset.write_obj(0)
+    """
+    dataset.write_obj(1500)
     #dataloader = torch.utils.data.DataLoader(dataset, batch_size=1, shuffle=True, collate_fn=many_to_one_collate_fn, num_workers=8)
     #print(len(dataset))
     #for full, coords, labels in dataloader:
      #   print(full.shape, coords.shape, labels.shape)
-
+    """
+    dataset = WeaponDatasetHighRes(target_path="../../../../fastdata/Smiths_LKA_Weapons/len_1/",
+                        npoints=2**14,
+                        length=2,
+                        side_len=32,
+                        test=True)
+    
+    (dataset[0])
+    """
                                         
