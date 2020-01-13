@@ -5,7 +5,7 @@ import torch.nn.functional as F
 from torch.autograd import Function
 import numpy as np
 from config import device
-
+from pykdtree.kdtree import KDTree
 
 # 3D +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
@@ -52,66 +52,6 @@ class Res_Block_Down_3D(nn.Module):
             out = self.layer_pool(out)
         return out
 
-def residual(nIn, nOut):
-    if nIn != nOut:
-        return scn.NetworkInNetwork(nIn, nOut, False)
-    else:
-        return scn.Identity()
-
-class Res_Block_Down_3D_Sparse(nn.Module):
-    def __init__(self, size_in_channels, size_out_channels, size_filter, size_stride, fn_act, pool_avg):
-        super(Res_Block_Down_3D_Sparse, self).__init__()
-
-        # Params +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-        self._pool_avg = pool_avg
-        self._size_in_channels = size_in_channels
-        self._size_out_channels = size_out_channels
-
-        # Nodes ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-
-        self.layer_conv1 = scn.SubmanifoldConvolution(3, size_in_channels,size_out_channels, size_filter, True)
-        self.layer_norm1 = scn.BatchNormalization(size_out_channels)
-
-        self.fn_act = fn_act
-
-        self.layer_conv2 = scn.SubmanifoldConvolution(3, size_out_channels,size_out_channels, size_filter, True)
-        self.layer_norm2 = scn.BatchNormalization(size_out_channels)
-
-        self.x = scn.Sequential().add(self.layer_conv1).add(self.layer_norm1).add(
-                                      self.fn_act).add(
-                                      self.layer_conv2).add(self.layer_norm2)
-
-        self.block = scn.ConcatTable().add(
-            self.x).add(
-            residual(size_in_channels, size_out_channels))
-
-        self.add_res = scn.AddTable()
-
-
-        if self._pool_avg:
-            # TODO: Automatic dimension caluclation
-            self.layer_pool = scn.AveragePooling(3, (2,2,2), 2)
-
-
-    def forward(self, x):
-        out = self.block(x)
-        out = self.add_res(out)
-
-        if self._pool_avg:
-            out = self.layer_pool(out)
-        return out
-
-class Bottleneck_Sparse_to_Dense(nn.Module):
-        def __init__(self, cube_size, size_in_channels, size_out_channels, fn_act, dimension=3):
-            super(Bottleneck_Sparse_to_Dense, self).__init__()
-            self.dense = scn.SparseToDense(dimension,size_in_channels)
-            self.linear = nn.Linear(size_in_channels * cube_size**3, size_out_channels)
-            self.fn_act = fn_act
-
-        def forward(self, x):
-            out = self.dense(x)
-            out = out.view(out.shape[0],-1)
-            return self.fn_act(self.linear(out))
 
 class Res_Block_Up_Flat(nn.Module):
     def __init__(self, size_in_channels, size_out_channels, fn_act):
@@ -186,45 +126,7 @@ class Res_Block_Up_1D(nn.Module):
         return out
 
 
-# Utilities ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-
-class BinaryFunction(Function):
-    @staticmethod
-    def forward(ctx, input):
-        #ctx.save_for_backward(input)
-        return torch.sign(input)
-
-    @staticmethod
-    def backward(ctx, grad_output):
-        #input, = ctx.saved_tensors
-        #grad_output[input>1]=0
-        #grad_output[input<-1]=0
-        return grad_output
-
-
-class Binary(nn.Module):
-    def __init__(self):
-        super(Binary, self).__init__()
-        self.fn = BinaryFunction.apply
-
-    def forward(self, x):
-        return (self.fn(x) + 1) / 2
-
-class ScnBinary(nn.Module):
-    def __init__(self, *args, **kwargs):
-        super(ScnBinary, self).__init__()
-        self.fn = BinaryFunction.apply
-
-    def forward(self, input):
-        output = scn.SparseConvNetTensor()
-        output.features = self.fn(input.features)
-        output.metadata = input.metadata
-        output.spatial_size = input.spatial_size
-        return output
-
-    def __repr__(self):
-        return self.__class__.__name__ + '()'
-
+# Scores ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
 def dice_loss(input, target):
     smoothness = 1.
@@ -234,3 +136,26 @@ def dice_loss(input, target):
     intersection = (i_ * t_).sum()
 
     return -1 * ((2. * intersection + smoothness) / (i_.sum() + t_.sum() + smoothness))
+
+
+def IOU(coords, yhat, labels, batch_size, threshold=0.9):
+    coords = coords.reshape(batch_size, -1, 3)
+    yhat = yhat.reshape(batch_size, -1, 1)
+    labels = labels.reshape(batch_size, -1, 1)
+    
+    iou_batch = []
+    for i in range(batch_size):
+        yhat_i = coords[i][torch.squeeze(yhat[i] >= threshold)].cpu().numpy()
+        labels_i = coords[i][torch.squeeze(labels[i] == 1)].cpu().numpy()
+        if labels_i.shape[0] > 0:
+            kd_tree = KDTree(labels_i, leafsize=16)
+            dist, _ = kd_tree.query(yhat_i, k=1)
+            hits = (dist == 0)
+            hits_sum = np.sum(hits)
+            iou_batch.append( hits_sum / (yhat_i.shape[0] + labels_i.shape[0] - hits_sum))
+        else:
+            iou_batch.append(
+                1 - (yhat_i.shape[0] / (yhat_i.shape[0] + coords[i].shape[0] - yhat_i.shape[0])))
+
+    return np.mean(np.array(iou_batch))
+

@@ -19,11 +19,11 @@ from config import device
 # ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 # Base Network Class
 class Network_Generator():
-    def __init__(self, rate_learn, size_batch, size_iter, size_print_every, oj_loss, optimizer, oj_model, collate_fn=None):
+    def __init__(self, rate_learn, size_iter, size_print_every, oj_loss, optimizer, oj_model, collate_fn=None):
 
         # Params +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
         self._rate_learning = rate_learn
-        self._size_batch = size_batch
+        self._size_batch = 1
         self._size_iter = size_iter
         self._size_print_every = size_print_every
 
@@ -35,14 +35,14 @@ class Network_Generator():
         self._collate_fn = collate_fn
 
     # TODO only working with batchsize 1 currently (actual labels)
-    def test(self, test_dataset):
+    def test(self, test_dataset, side_len, npoints):
         loader_test = DataLoader(dataset=test_dataset, batch_size=self._size_batch, pin_memory=False, shuffle=True, collate_fn=self._collate_fn)
         checkpoint = torch.load("model/"+ type(self._oj_model).__name__ + "_" + str(device) + ".pt", map_location=lambda storage, loc: storage)
         self._oj_model.load_state_dict(checkpoint)
         del checkpoint  # dereference seems crucial
         torch.cuda.empty_cache()
         losses_test_batch = []
-        return self._val(loader_test, losses_test_batch)
+        return self._val(loader_test, losses_test_batch, npoints=npoints, side_len=side_len)
 
         """
         with torch.no_grad():
@@ -65,149 +65,7 @@ class Network_Generator():
         return np.mean(np.array(losses_test_batch)), np.mean(np.array(precision_test_batch)), np.mean(np.array(recall_test_batch))
         """
 
-    def draw_v2(self, test_dataset, side_len):
-        loader_test = DataLoader(dataset=test_dataset, batch_size=self._size_batch, pin_memory=False, shuffle=True, collate_fn=self._collate_fn)
-        checkpoint = torch.load("model/"+ type(self._oj_model).__name__ + "_" + str(device) + ".pt", map_location=lambda storage, loc: storage)
-        self._oj_model.load_state_dict(checkpoint)
-        del checkpoint  # dereference seems crucial
-        torch.cuda.empty_cache()
-        side_len_clean = side_len
 
-        with torch.no_grad():
-            for batch in loader_test:
-                self._oj_model.eval()
-                # Makes predictions ++++++++++++
-                volume, coords, _, actual = batch
-                # Create initial query +++++++++
-                x = torch.arange(0, volume.shape[2])
-                y = torch.arange(0, volume.shape[3])
-                z = torch.arange(0, volume.shape[4])
-                x,y,z = torch.meshgrid(x,y,z)
-                query = torch.cat((torch.unsqueeze(x.reshape(-1), dim=1), torch.unsqueeze(y.reshape(-1), dim=1),  torch.unsqueeze(z.reshape(-1), dim=1)), dim=1)
-                query = query.float().to(device) * side_len
-                active = 1
-
-                to_write = np.empty((0, 3))
-                # Generate basic offsets
-                above = torch.FloatTensor([[0,0,1]]).to(device)
-                below = torch.FloatTensor([[0,0,-1]]).to(device)
-                left = torch.FloatTensor([[0,1,0]]).to(device)
-                right = torch.FloatTensor([[0,-1,0]]).to(device)
-                behind = torch.FloatTensor([[1,0,0]]).to(device)
-                before = torch.FloatTensor([[-1,0,0]]).to(device)
-                # TODO catch negative values, no error, in best case network handles this
-                offsets = [above, left, behind]
-                side_len -= 1
-
-                # Loop to refine grid ++++++++++
-                while active > 0 and side_len >= 1:
-                    yhat = self._oj_model.inference(volume.to(device), query.to(device))
-                    hits = torch.squeeze(yhat)
-                    #print("Acitvation Test", torch.sum(yhat).item())
-                    locs = query[hits == 1]
-                    to_write = np.append(to_write, locs.cpu().numpy(), axis=0)
-                    # Get scaled offsets to check for neighbours
-                    offsets_s = [offset * side_len for offset in offsets]
-
-                    coords = [locs + offset for offset in offsets_s]
-                    acts = [self._oj_model.inference(volume.to(device), coord.to(device)) for coord in coords]
-                    masks = [act == 1 for act in acts]
-                    for i, mask in enumerate(masks):
-                        current_coords = locs[torch.squeeze(mask)]
-
-                        if i == 0:
-                            add = above
-                        elif i ==1 :
-                            add = left
-                        elif  i==2:
-                            add = behind
-
-                        for i in range(side_len):
-                            to_write = np.append(to_write, (current_coords + add * (i+1)).cpu().numpy(), axis=0)
-                        
-                    side_len -= 2
-                    query = torch.empty((0,3)).to(device)
-                    masks_inv = [mask.logical_not() for mask in masks]
-
-                    for i, mask in enumerate(masks_inv):
-                        current_coords = locs[torch.squeeze(mask)]
-
-                        if i == 0:
-                            add = above
-                        elif i ==1 :
-                            add = left
-                        elif  i==2:
-                            add = behind
-
-                        query = torch.cat((query, current_coords + add), dim=0) 
-
-                    active = query.shape[0]
-                    
-
-                
-
-                to_write = to_write.astype(np.short)
-                # Only each 5th as meshlab crashes otherwise
-                to_write_act = actual[::10,:].cpu().numpy().astype(np.short)
-                with open('outfile_auto.obj','w') as f:
-                    for line in to_write:
-                        f.write("v " + " " + str(line[0]) + " " + str(line[1]) + " " + str(line[2]) + 
-                            " " + "0.0" + " " + "0.0" + " " + "0.5  " + "\n")
-                    f.write("v " + " " + "0"+ " " + "0" + " " + "0" + 
-                        " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
-
-                    f.write("v " + " " + str(volume.shape[2] * side_len_clean)+  " " + "0" + " " + "0" + 
-                        " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
-                    
-                    f.write("v " + " " + str(volume.shape[2] * side_len_clean) +  " " + str(volume.shape[3] * side_len_clean) + " " + "0" + 
-                        " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
-                
-                    f.write("v " + " " + "0" +  " " + str(volume.shape[3] * side_len_clean) + " " + "0" + 
-                        " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
-
-                    f.write("v " + " " + "0"+ " " + "0" + " " + str(volume.shape[4] * side_len_clean) + 
-                        " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
-
-                    f.write("v " + " " + str(volume.shape[2] * side_len_clean)+  " " + "0" + " " + str(volume.shape[4] * side_len_clean) + 
-                        " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
-                    
-                    f.write("v " + " " + str(volume.shape[2] * side_len_clean) +  " " + str(volume.shape[3] * side_len_clean) + " " + str(volume.shape[4] * side_len_clean)+ 
-                        " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
-                
-                    f.write("v " + " " + "0" +  " " + str(volume.shape[3] * side_len_clean) + " " + str(volume.shape[4] * side_len_clean) + 
-                        " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")           
-        
-                with open('outfile_auto_org.obj','w') as f:
-                    for line in to_write_act:
-                        f.write("v " + " " + str(line[0]) + " " + str(line[1]) + " " + str(line[2]) + 
-                        " " + "1.0" + " " + "0.0" + " " + "0.0" + "\n")
-                            #Corners of volume
-                    f.write("v " + " " + "0"+ " " + "0" + " " + "0" + 
-                        " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
-
-                    f.write("v " + " " + str(volume.shape[2] * side_len_clean)+  " " + "0" + " " + "0" + 
-                        " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
-                    
-                    f.write("v " + " " + str(volume.shape[2] * side_len_clean) +  " " + str(volume.shape[3] * side_len_clean) + " " + "0" + 
-                        " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
-                
-                    f.write("v " + " " + "0" +  " " + str(volume.shape[3] * side_len_clean) + " " + "0" + 
-                        " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
-
-                    f.write("v " + " " + "0"+ " " + "0" + " " + str(volume.shape[4] * side_len_clean) + 
-                        " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
-
-                    f.write("v " + " " + str(volume.shape[2] * side_len_clean)+  " " + "0" + " " + str(volume.shape[4] * side_len_clean) + 
-                        " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
-                    
-                    f.write("v " + " " + str(volume.shape[2] * side_len_clean) +  " " + str(volume.shape[3] * side_len_clean) + " " + str(volume.shape[4] * side_len_clean)+ 
-                        " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
-                
-                    f.write("v " + " " + "0" +  " " + str(volume.shape[3] * side_len_clean) + " " + str(volume.shape[4] * side_len_clean) + 
-                        " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")  
-        return 0
-
-    def draw3(self, test_dataset, side_len):
         loader_test = DataLoader(dataset=test_dataset, batch_size=self._size_batch, pin_memory=False, shuffle=True, collate_fn=self._collate_fn)
         checkpoint = torch.load("model/"+ type(self._oj_model).__name__ + "_" + str(device) + ".pt", map_location=lambda storage, loc: storage)
         self._oj_model.load_state_dict(checkpoint)
@@ -371,10 +229,173 @@ class Network_Generator():
                     f.write("v " + " " + "0" +  " " + str(volume.shape[3] * side_len_clean) + " " + str(volume.shape[4] * side_len_clean) + 
                         " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")                          
         return 0
-
-    def draw(self, test_dataset, side_len):
+    
+    def draw_low(self, test_dataset, side_len, name=""):
         loader_test = DataLoader(dataset=test_dataset, batch_size=self._size_batch, pin_memory=False, shuffle=True, collate_fn=self._collate_fn)
-        checkpoint = torch.load("model/"+ type(self._oj_model).__name__ + "_" + str(device) + ".pt", map_location=lambda storage, loc: storage)
+        checkpoint = torch.load("model/"+ type(self._oj_model).__name__ + "_" + str(device) + name + ".pt", map_location=lambda storage, loc: storage)
+        self._oj_model.load_state_dict(checkpoint)
+        del checkpoint  # dereference seems crucial
+        torch.cuda.empty_cache()
+        side_len_clean = 1
+        down_sample=side_len
+        to_write = np.empty((0, 3))
+        with torch.no_grad():
+            for batch in loader_test:
+                self._oj_model.eval()
+                # Makes predictions ++++++++++++
+                volume, label_in = batch
+                volume = torch.from_numpy(volume).float()
+                # Create initial query +++++++++
+                x = torch.arange(0, volume.shape[2]/down_sample)
+                y = torch.arange(0, volume.shape[3]/down_sample)
+                z = torch.arange(0, volume.shape[4]/down_sample)
+    
+                x,y,z = torch.meshgrid(x,y,z)
+                query = torch.cat((torch.unsqueeze(x.reshape(-1), dim=1), torch.unsqueeze(y.reshape(-1), dim=1),  torch.unsqueeze(z.reshape(-1), dim=1)), dim=1)
+                query = query.float().to(device) * side_len
+                active = 1
+
+        
+                # Generate basic offsets
+                neutral = torch.FloatTensor([[0,0,0]]).to(device)
+                above = torch.FloatTensor([[0,0,1]]).to(device)
+                left = torch.FloatTensor([[0,1,0]]).to(device)
+                behind = torch.FloatTensor([[1,0,0]]).to(device)
+                # TODO catch negative values, no error, in best case network handles this
+                offsets = [left, behind, left+behind, neutral+above, above+left, above+behind, above+left+behind]
+
+                # Loop to refine grid ++++++++++
+                while active > 0 and side_len >= 1:
+                    print(active)
+                    # Get scaled offsets to check for neighbours
+                    offsets_s = [neutral] + [torch.relu(offset * side_len - 1) for offset in offsets]
+                    coords = [query + offset for offset in offsets_s]
+                    acts = [self._oj_model.inference(volume.to(device), coord.to(device)) for coord in coords]
+                    print(torch.sum(torch.stack(acts)))
+                    masks = [act == 1 for act in acts]
+                    sum_masks = functools.reduce(lambda a,b : a & b, masks)
+                    sum_masks_inv = functools.reduce(lambda a,b : a.logical_not() & b.logical_not(), masks)
+                    next_query_mask = torch.squeeze((sum_masks | sum_masks_inv).logical_not())
+                    mask_full = torch.squeeze(sum_masks)
+                    query_to_write = query[mask_full]
+  
+                    for i in range(side_len):
+                        for j in range(side_len):
+                            for k in range(side_len):
+                                to_write = np.append(to_write, (query_to_write + left * i + above * j + behind * k).cpu().numpy(), axis=0)
+
+                    side_len = int(side_len/2)
+                    query_next = query[next_query_mask]
+                    query = torch.empty((0,3)).to(device)
+                    
+                    for offset in [neutral] + offsets:
+                        query = torch.cat((query, query_next + offset * side_len), dim=0)
+
+                    active = query.shape[0]
+
+                to_write = to_write.astype(np.short)
+                print(to_write.shape, volume.shape)
+                to_write_labels = label_in.astype(np.short)
+                #print(to_write_labels.shape)
+                with open('outfile_auto.obj','w') as f:
+                    for line in to_write:
+                        f.write("v " + " " + str(line[0]) + " " + str(line[1]) + " " + str(line[2]) + 
+                            " " + "0.0" + " " + "0.0" + " " + "0.5  " + "\n")
+                    f.write("v " + " " + "0"+ " " + "0" + " " + "0" + 
+                        " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+
+                    f.write("v " + " " + str(volume.shape[2] * side_len_clean)+  " " + "0" + " " + "0" + 
+                        " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+                    
+                    f.write("v " + " " + str(volume.shape[2] * side_len_clean) +  " " + str(volume.shape[3] * side_len_clean) + " " + "0" + 
+                        " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+                
+                    f.write("v " + " " + "0" +  " " + str(volume.shape[3] * side_len_clean) + " " + "0" + 
+                        " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+
+                    f.write("v " + " " + "0"+ " " + "0" + " " + str(volume.shape[4] * side_len_clean) + 
+                        " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+
+                    f.write("v " + " " + str(volume.shape[2] * side_len_clean)+  " " + "0" + " " + str(volume.shape[4] * side_len_clean) + 
+                        " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+                    
+                    f.write("v " + " " + str(volume.shape[2] * side_len_clean) +  " " + str(volume.shape[3] * side_len_clean) + " " + str(volume.shape[4] * side_len_clean)+ 
+                        " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+                
+                    f.write("v " + " " + "0" +  " " + str(volume.shape[3] * side_len_clean) + " " + str(volume.shape[4] * side_len_clean) + 
+                        " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")           
+        
+                vol = volume[0]
+                maximum = torch.max(vol)
+                vol = vol/maximum
+                vol[vol - 0.05 < 0] = 0
+
+                with open('outfile_org.obj','w') as f:
+                    for i in range(vol.shape[1]):
+                        for j in range(vol.shape[2]):
+                            for k in range(vol.shape[3]):
+                                color = vol[0][i][j][k]
+                                if color == 0:
+                                    continue
+                                f.write("v " + " " + str(i) + " " + str(j) + " " + str(k) + 
+                                        " " + str(color.item()) + " " + str(0.5) + " " + str(0.5) + "\n")
+                            #Corners of volume
+                    f.write("v " + " " + "0"+ " " + "0" + " " + "0" + 
+                        " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+
+                    f.write("v " + " " + str(volume.shape[2] * side_len_clean)+  " " + "0" + " " + "0" + 
+                        " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+                    
+                    f.write("v " + " " + str(volume.shape[2] * side_len_clean) +  " " + str(volume.shape[3] * side_len_clean) + " " + "0" + 
+                        " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+                
+                    f.write("v " + " " + "0" +  " " + str(volume.shape[3] * side_len_clean) + " " + "0" + 
+                        " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+
+                    f.write("v " + " " + "0"+ " " + "0" + " " + str(volume.shape[4] * side_len_clean) + 
+                        " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+
+                    f.write("v " + " " + str(volume.shape[2] * side_len_clean)+  " " + "0" + " " + str(volume.shape[4] * side_len_clean) + 
+                        " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+                    
+                    f.write("v " + " " + str(volume.shape[2] * side_len_clean) +  " " + str(volume.shape[3] * side_len_clean) + " " + str(volume.shape[4] * side_len_clean)+ 
+                        " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+                
+                    f.write("v " + " " + "0" +  " " + str(volume.shape[3] * side_len_clean) + " " + str(volume.shape[4] * side_len_clean) + 
+                        " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")  
+                
+                with open('outfile_auto_labels.obj','w') as f:
+                    for line in to_write_labels:
+                        f.write("v " + " " + str(line[0]) + " " + str(line[1]) + " " + str(line[2]) + 
+                        " " + "0.0" + " " + "1.0" + " " + "0.0" + "\n")
+                            #Corners of volume
+                    f.write("v " + " " + "0"+ " " + "0" + " " + "0" + 
+                        " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+
+                    f.write("v " + " " + str(volume.shape[2] * side_len_clean)+  " " + "0" + " " + "0" + 
+                        " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+                    
+                    f.write("v " + " " + str(volume.shape[2] * side_len_clean) +  " " + str(volume.shape[3] * side_len_clean) + " " + "0" + 
+                        " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+                
+                    f.write("v " + " " + "0" +  " " + str(volume.shape[3] * side_len_clean) + " " + "0" + 
+                        " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+
+                    f.write("v " + " " + "0"+ " " + "0" + " " + str(volume.shape[4] * side_len_clean) + 
+                        " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+
+                    f.write("v " + " " + str(volume.shape[2] * side_len_clean)+  " " + "0" + " " + str(volume.shape[4] * side_len_clean) + 
+                        " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+                    
+                    f.write("v " + " " + str(volume.shape[2] * side_len_clean) +  " " + str(volume.shape[3] * side_len_clean) + " " + str(volume.shape[4] * side_len_clean)+ 
+                        " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+                
+                    f.write("v " + " " + "0" +  " " + str(volume.shape[3] * side_len_clean) + " " + str(volume.shape[4] * side_len_clean) + 
+                        " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")                          
+                
+    def draw(self, test_dataset, side_len, name=""):
+        loader_test = DataLoader(dataset=test_dataset, batch_size=self._size_batch, pin_memory=False, shuffle=True, collate_fn=self._collate_fn)
+        checkpoint = torch.load("model/"+ type(self._oj_model).__name__ + "_" + str(device) + name + ".pt", map_location=lambda storage, loc: storage)
         self._oj_model.load_state_dict(checkpoint)
         del checkpoint  # dereference seems crucial
         torch.cuda.empty_cache()
@@ -547,7 +568,7 @@ class Network_Generator():
                         " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")                          
                 """
     # Validate, ignore grads
-    def _val(self, loader_val, losses_val):
+    def _val(self, loader_val, losses_val, npoints, side_len):
         with torch.no_grad():
             losses_val_batch = []
             cache_vol = []
@@ -560,7 +581,7 @@ class Network_Generator():
                 if j % 8 == 7:
                     samples = []
                     for i in range(8):
-                        samp = sample(cache_vol[i], cache_labels[i], npoints=2**10, side_len=32, test=False)
+                        samp = sample(cache_vol[i], cache_labels[i], npoints=npoints, side_len=side_len, test=False)
                         if samp is None:
                              continue
                         samples.append(samp)
@@ -582,7 +603,7 @@ class Network_Generator():
             return loss_val
 
 
-    def train(self, train_dataset, val_dataset, side_len, npoints, name, load=False):
+    def train(self, train_dataset, val_dataset, side_len, npoints, name, load=False, cache_size=1000, win_sampled_size=16):
 
         # Function vars ++++++++++++++++++++++++++++++++++++++++++++++++++++++++
         loss_best = float('inf')
@@ -612,6 +633,7 @@ class Network_Generator():
         for _ in range(self._size_iter):
 
             losses_train_batch = []
+
             cache_vol = []
             cache_labels = []
 
@@ -619,31 +641,31 @@ class Network_Generator():
                 cache_vol.append(batch[0])
                 cache_labels.append(batch[1])
 
-                if len(cache_vol) > 1000:
+                if len(cache_vol) > cache_size:
                     del cache_vol[0]
                     del cache_labels[0]
                     
                 # One step of training
                 for j in range(1):
-                    indices = np.random.choice(len(cache_vol), 16)
+                    indices = np.random.choice(len(cache_vol), win_sampled_size)
                     samples = []
                     for i in indices:
-                        samp = sample(cache_vol[i], cache_labels[i], npoints=2**12, side_len=32,test=False)
+                        samp = sample(cache_vol[i], cache_labels[i], npoints=npoints, side_len=side_len, test=False)
                         if samp is None:
                              continue
                         samples.append(samp)
-                    batch_in= many_to_one_collate_fn_sample(samples)
+                    batch_in = many_to_one_collate_fn_sample(samples)
                     loss_train_batch, mse_train_batch = _step_train(batch_in)
                     print("Training Loss Batch", i_, loss_train_batch, mse_train_batch, flush=True)
 
                 if i_ % self._size_print_every == self._size_print_every-1:
-                    loss_val = self._val(loader_val, losses_val)
+                    loss_val = self._val(loader_val, losses_val, npoints=npoints, side_len=side_len)
                     print("Validation Loss", loss_val)
 
                     if loss_val < loss_best:
                         loss_best = loss_val
-                        torch.save(self._oj_model.state_dict(), "model/"+ type(self._oj_model).__name__ + "_" + str(device) + ".pt")
-                        torch.save(self._oj_optimizer.state_dict(), "optimizer/"+ type(self._oj_model).__name__ + "_" + str(device) + ".pt")
+                        torch.save(self._oj_model.state_dict(), "model/"+ type(self._oj_model).__name__ + "_" + str(device) + name + ".pt")
+                        torch.save(self._oj_optimizer.state_dict(), "optimizer/"+ type(self._oj_model).__name__ + "_" + str(device) + name + ".pt")
             loss_train = np.mean(losses_train_batch)
             losses_train.append(loss_train)
             print("Training Loss Iteration", loss_train,flush=True)
@@ -674,21 +696,21 @@ class Res_Auto_3d_Model_Occu_Parallel(nn.Module):
         return mines[0].item(), maxes[0].item(), mines[1].item(), maxes[1].item(), mines[2].item(), maxes[2].item()
 
     def inference(self, volume, coords):
-        return (torch.sign(self.forward(volume, coords) - 0.95) + 1) / 2
+        return (torch.sign(self.forward(volume, coords) - 0.9) + 1) / 2
 
 class Res_Auto_3d_Model_Occu(nn.Module):
     def __init__(self):
         super(Res_Auto_3d_Model_Occu,self).__init__()
 
         self.encode = nn.Sequential(layers.Res_Block_Down_3D(1, 64, 3, 1, nn.SELU(), False),
-                                    layers.Res_Block_Down_3D(64, 64, 3, 1, nn.SELU(), False),
+                                    layers.Res_Block_Down_3D(64, 64, 3, 1, nn.SELU(), True),
                                     layers.Res_Block_Down_3D(64, 64, 3, 1, nn.SELU(), True),
                                     layers.Res_Block_Down_3D(64, 64, 3, 1, nn.SELU(), True),
                                     layers.Res_Block_Down_3D(64, 3, 3, 1, nn.SELU(), True))
 
-        self.decode = nn.Sequential(layers.Res_Block_Up_Flat(192 + 3, 512, nn.SELU()),
-                                    layers.Res_Block_Up_Flat(512, 512, nn.SELU()),
-                                    layers.Res_Block_Up_Flat(512, 256, nn.SELU()),
+        self.decode = nn.Sequential(layers.Res_Block_Up_Flat(180 + 3, 256, nn.SELU()),
+                                    layers.Res_Block_Up_Flat(256, 256, nn.SELU()),
+                                    layers.Res_Block_Up_Flat(256, 256, nn.SELU()),
                                     layers.Res_Block_Up_Flat(256, 256, nn.SELU()),
                                     layers.Res_Block_Up_Flat(256, 128, nn.SELU()),
                                     layers.Res_Block_Up_Flat(128, 1, nn.Sigmoid()))
