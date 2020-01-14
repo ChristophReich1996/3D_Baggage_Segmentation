@@ -9,6 +9,7 @@ from pykdtree.kdtree import KDTree
 
 # 3D +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
+
 class Res_Block_Down_3D(nn.Module):
     def __init__(self, size_in_channels, size_out_channels, size_filter, size_stride, fn_act, pool_avg):
         super(Res_Block_Down_3D, self).__init__()
@@ -20,19 +21,20 @@ class Res_Block_Down_3D(nn.Module):
 
         # Nodes ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
-        self.layer_conv1 = nn.Conv3d(size_in_channels,size_out_channels, size_filter, size_stride, padding=(int(size_filter/2),int(size_filter/2), int(size_filter/2)))
+        self.layer_conv1 = nn.Conv3d(size_in_channels, size_out_channels, size_filter, size_stride, padding=(
+            int(size_filter/2), int(size_filter/2), int(size_filter/2)))
         self.layer_norm1 = nn.BatchNorm3d(size_out_channels)
 
         self.fn_act = fn_act
         self.fn_identity = nn.Identity()
 
-        self.layer_conv2= nn.Conv3d(size_out_channels,size_out_channels, size_filter, size_stride, padding=(int(size_filter/2),int(size_filter/2), int(size_filter/2)))
+        self.layer_conv2 = nn.Conv3d(size_out_channels, size_out_channels, size_filter, size_stride, padding=(
+            int(size_filter/2), int(size_filter/2), int(size_filter/2)))
         self.layer_norm2 = nn.BatchNorm3d(size_out_channels)
 
         if self._pool_avg:
             # TODO: Automatic dimension caluclation
-            self.layer_pool = nn.AvgPool3d((2,2,2),stride=2)
-
+            self.layer_pool = nn.AvgPool3d((2, 2, 2), stride=2)
 
     def forward(self, x):
         identity = self.fn_identity(x)
@@ -43,7 +45,8 @@ class Res_Block_Down_3D(nn.Module):
         out = self.layer_conv2(out)
         out = self.layer_norm2(out)
 
-        identity = F.pad(identity, (0, 0, 0, 0, 0, 0, 0, abs(self._size_in_channels - self._size_out_channels)))
+        identity = F.pad(identity, (0, 0, 0, 0, 0, 0, 0, abs(
+            self._size_in_channels - self._size_out_channels)))
 
         #out += identity
         out = self.fn_act(out)
@@ -64,15 +67,13 @@ class Res_Block_Up_Flat(nn.Module):
 
         self.fn_act = fn_act
         if size_in_channels != size_out_channels:
-            self.fn_identity = nn.Linear(size_in_channels, size_out_channels, bias=False)
+            self.fn_identity = nn.Linear(
+                size_in_channels, size_out_channels, bias=False)
         else:
             self.fn_identity = nn.Identity()
 
-
-        self.layer_flat2= nn.Linear(size_out_channels, size_out_channels)
+        self.layer_flat2 = nn.Linear(size_out_channels, size_out_channels)
         self.layer_norm2 = nn.BatchNorm1d(size_out_channels)
-
-
 
     def forward(self, x):
         identity = self.fn_identity(x)
@@ -86,8 +87,8 @@ class Res_Block_Up_Flat(nn.Module):
         out += identity
         out = self.fn_act(out)
 
-
         return out
+
 
 class Res_Block_Up_1D(nn.Module):
     def __init__(self, size_in_channels, size_out_channels, fn_act):
@@ -100,15 +101,13 @@ class Res_Block_Up_1D(nn.Module):
 
         self.fn_act = fn_act
         if size_in_channels != size_out_channels:
-            self.fn_identity = nn.Linear(size_in_channels, size_out_channels, bias=False)
+            self.fn_identity = nn.Linear(
+                size_in_channels, size_out_channels, bias=False)
         else:
             self.fn_identity = nn.Identity()
 
-
-        self.layer_flat2= nn.Linear(size_out_channels, size_out_channels)
+        self.layer_flat2 = nn.Linear(size_out_channels, size_out_channels)
         self.layer_norm2 = nn.BatchNorm1d(size_out_channels)
-
-
 
     def forward(self, x):
         identity = self.fn_identity(x)
@@ -121,7 +120,6 @@ class Res_Block_Up_1D(nn.Module):
 
         out += identity
         out = self.fn_act(out)
-
 
         return out
 
@@ -142,7 +140,7 @@ def IOU(coords, yhat, labels, batch_size, threshold=0.9):
     coords = coords.reshape(batch_size, -1, 3)
     yhat = yhat.reshape(batch_size, -1, 1)
     labels = labels.reshape(batch_size, -1, 1)
-    
+
     iou_batch = []
     for i in range(batch_size):
         yhat_i = coords[i][torch.squeeze(yhat[i] >= threshold)].cpu().numpy()
@@ -152,10 +150,10 @@ def IOU(coords, yhat, labels, batch_size, threshold=0.9):
             dist, _ = kd_tree.query(yhat_i, k=1)
             hits = (dist == 0)
             hits_sum = np.sum(hits)
-            iou_batch.append( hits_sum / (yhat_i.shape[0] + labels_i.shape[0] - hits_sum))
+            iou_batch.append(
+                hits_sum / (yhat_i.shape[0] + labels_i.shape[0] - hits_sum))
         else:
             iou_batch.append(
                 1 - (yhat_i.shape[0] / (yhat_i.shape[0] + coords[i].shape[0] - yhat_i.shape[0])))
 
     return np.mean(np.array(iou_batch))
-
