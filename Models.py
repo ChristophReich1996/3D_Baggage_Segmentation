@@ -29,11 +29,12 @@ class OccupancyNetwork(nn.Module):
                  number_of_decoding_blocks: int = 6,  # Decoding path parameter
                  channels_in_decoding_blocks: List[Tuple[int]] =
                  [(180 + 3, 256), (256, 256), (256, 512), (512, 256), (256, 256), (256, 1)],
-                 activation_decoding: Union[str, List[str]] = ['prelu', 'prelu', 'prelu', 'prelu', 'prelu', 'sigmoid'],
+                 activation_decoding: Union[str, List[str]] = 'prelu',
                  normalization_decoding: Union[str, List[str]] = 'batchnorm',
                  dropout_rate_decoding: Union[float, List[float]] = 0.0,
                  bias_decoding: Union[bool, List[bool]] = True,
-                 bias_residual_decoding: Union[bool, List[bool]] = True) -> None:
+                 bias_residual_decoding: Union[bool, List[bool]] = True,
+                 output_activation: str = 'sigmoid') -> None:
         """
         Constructor method
         :param number_of_encoding_blocks: (int) Number of blocks in encoding path
@@ -54,6 +55,7 @@ class OccupancyNetwork(nn.Module):
         :param dropout_rate_decoding: (float, List[float]) Dropout rate to perform in each decoding block
         :param bias_decoding: (bool, List[bool]) Use bias in each convolution in each decoding block
         :param bias_residual_decoding: (bool, List[bool]) Use bias in residual mapping in each decoding block
+        :param output_activation: (str) Type of activation function used for output
         """
         # Call super constructor
         super(OccupancyNetwork, self).__init__()
@@ -118,6 +120,9 @@ class OccupancyNetwork(nn.Module):
             bias_residual=bias_residual_decoding[index])
             for index in range(number_of_decoding_blocks)])
 
+        # Init output activation
+        self.output_activation = Misc.get_activation(output_activation)
+
     def forward(self, volume: torch.tensor, coordinates: torch.tensor) -> torch.tensor:
         """
         Forward pass of the occupancy network
@@ -137,12 +142,9 @@ class OccupancyNetwork(nn.Module):
         # output_decoding = self.decoding(input_decoding)
 
         out = self.encoding(volume)
-        print(out.shape)
         out = out.view(out.shape[0], -1)
-        print(out.shape)
         out = torch.cat((torch.repeat_interleave(out, int(coordinates.shape[0] / volume.shape[0]), dim=0), coordinates),
                         dim=1)
-        print(out.shape)
         out = self.decoding(out)
-        print(out.shape)
+        out = self.output_activation(out)
         return out  # output_decoding
