@@ -12,15 +12,15 @@ class OccupancyNetwork(nn.Module):
     Implementation of an occupancy network for binary classification of a 3D volume
     """
 
-    def __init__(self, number_of_encoding_blocks: int = 6, # 5,  # Encoding path parameters
+    def __init__(self, number_of_encoding_blocks: int = 6,  # 5,  # Encoding path parameters
                  channels_in_encoding_blocks: List[Tuple[int]] =
-                #  [(1, 64), (64, 64), (64, 64), (64, 64), (64,3)],
+                 #  [(1, 64), (64, 64), (64, 64), (64, 64), (64,3)],
                  [(1, 32), (32, 64), (64, 128), (128, 64), (64, 32), (32, 3)],
                  kernel_size_encoding: Union[int, List[int]] = 3, stride_encoding: Union[int, List[int]] = 1,
                  padding_encoding: Union[int, List[int]] = 1,
                  activation_encoding: Union[str, List[str]] = 'prelu',
                  downsampling_encoding: Union[str, List[str]] =
-                #  ['none', 'averagepool', 'averagepool', 'averagepool', 'averagepool'],
+                 #  ['none', 'averagepool', 'averagepool', 'averagepool', 'averagepool'],
                  ['none', 'averagepool', 'averagepool', 'averagepool', 'averagepool', 'none'],
                  downsampling_factor_encoding: Union[int, List[int]] = 2,
                  normalization_encoding: Union[str, List[str]] = 'batchnorm',
@@ -29,7 +29,7 @@ class OccupancyNetwork(nn.Module):
                  number_of_decoding_blocks: int = 6,  # Decoding path parameter
                  channels_in_decoding_blocks: List[Tuple[int]] =
                  [(180 + 3, 256), (256, 256), (256, 512), (512, 256), (256, 256), (256, 1)],
-                 activation_decoding: Union[str, List[str]] = 'prelu',
+                 activation_decoding: Union[str, List[str]] = ['prelu', 'prelu', 'prelu', 'prelu', 'prelu', 'sigmoid'],
                  normalization_decoding: Union[str, List[str]] = 'batchnorm',
                  dropout_rate_decoding: Union[float, List[float]] = 0.0,
                  bias_decoding: Union[bool, List[bool]] = True,
@@ -138,10 +138,11 @@ class OccupancyNetwork(nn.Module):
 
         out = self.encoding(volume)
         print(out.shape)
-        out = out.view(out.shape[0],-1)
+        out = out.view(out.shape[0], -1)
         print(out.shape)
-        out = torch.cat((torch.repeat_interleave(out, int(coordinates.shape[0]/volume.shape[0]), dim=0), coordinates), dim=1)
+        out = torch.cat((torch.repeat_interleave(out, int(coordinates.shape[0] / volume.shape[0]), dim=0), coordinates),
+                        dim=1)
         print(out.shape)
         out = self.decoding(out)
         print(out.shape)
-        return out # output_decoding
+        return out  # output_decoding
