@@ -12,16 +12,16 @@ class OccupancyNetwork(nn.Module):
     Implementation of an occupancy network for binary classification of a 3D volume
     """
 
-    def __init__(self, number_of_encoding_blocks: int = 5, # 6,  # Encoding path parameters
+    def __init__(self, number_of_encoding_blocks: int = 6, # 5,  # Encoding path parameters
                  channels_in_encoding_blocks: List[Tuple[int]] =
-                 [(1, 64), (64, 64), (64, 64), (64, 64), (64,3)],
-                #  [(1, 32), (32, 64), (64, 128), (128, 64), (64, 32), (32, 3)],
+                #  [(1, 64), (64, 64), (64, 64), (64, 64), (64,3)],
+                 [(1, 32), (32, 64), (64, 128), (128, 64), (64, 32), (32, 3)],
                  kernel_size_encoding: Union[int, List[int]] = 3, stride_encoding: Union[int, List[int]] = 1,
                  padding_encoding: Union[int, List[int]] = 1,
                  activation_encoding: Union[str, List[str]] = 'prelu',
                  downsampling_encoding: Union[str, List[str]] =
-                 ['none', 'averagepool', 'averagepool', 'averagepool', 'averagepool'],
-                #  ['none', 'averagepool', 'averagepool', 'averagepool', 'averagepool', 'none'],
+                #  ['none', 'averagepool', 'averagepool', 'averagepool', 'averagepool'],
+                 ['none', 'averagepool', 'averagepool', 'averagepool', 'averagepool', 'none'],
                  downsampling_factor_encoding: Union[int, List[int]] = 2,
                  normalization_encoding: Union[str, List[str]] = 'batchnorm',
                  dropout_rate_encoding: Union[float, List[float]] = 0.0,
