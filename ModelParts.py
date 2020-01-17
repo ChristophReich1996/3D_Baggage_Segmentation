@@ -45,7 +45,7 @@ class VolumeEncoderBlock(nn.Module):
         self.convolution_2 = nn.Conv3d(in_channels=output_channels, out_channels=output_channels,
                                        kernel_size=kernel_size, stride=stride, padding=padding, bias=bias)
         # Init downsampling operation
-        self.donwsampling = Misc.get_downsampling_3d(downsampling=downsampling, factor=downsampling_factor,
+        self.downsampling = Misc.get_downsampling_3d(downsampling=downsampling, factor=downsampling_factor,
                                                      channels=output_channels)
 
     def forward(self, input: torch.tensor) -> torch.tensor:
@@ -67,7 +67,7 @@ class VolumeEncoderBlock(nn.Module):
         if self.dropout_rate > 0.0:  # Perform dropout
             output_activation_2 = F.dropout(output_activation_2, p=self.dropout_rate)
         # Downsampling stage
-        output_downsampling = self.donwsampling(output_activation_2)
+        output_downsampling = self.downsampling(output_activation_2)
         return output_downsampling
 
 
