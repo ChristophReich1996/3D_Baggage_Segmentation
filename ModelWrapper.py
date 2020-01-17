@@ -61,7 +61,7 @@ class OccupancyNetworkWrapper(object):
                 # Reset gradients
                 self.occupancy_network.zero_grad()
                 # Data to device
-                volumes = volumes.to(self.device).unsqueeze_(0)
+                volumes = volumes.to(self.device)
                 coordinates = coordinates.to(self.device)
                 labels = labels.to(self.device)
                 # Perform model prediction

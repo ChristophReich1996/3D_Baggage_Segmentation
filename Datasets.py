@@ -9,11 +9,12 @@ import Misc
 
 
 class WeaponDataset(data.Dataset):
-    def __init__(self, target_path: str, length: int, dim_max: int = 640, npoints: int = 2 ** 10, side_len: int = 32,
+    def __init__(self, target_path_volume: str, target_path_label: str, length: int, dim_max: int = 640, npoints: int = 2 ** 10, side_len: int = 32,
                  sampling: str = 'one', offset: int = 0, test: bool = False) -> None:
         """
         Constructor method
-        :param target_path: (str)
+        :param target_path_volume: (str)
+        :param target_path_label: (str)
         :param length: (int)
         :param dim_max: (int)
         :param npoints: (int)
@@ -26,7 +27,8 @@ class WeaponDataset(data.Dataset):
         self.side_len = side_len
         self.dim_max = int(dim_max / side_len)
         self.sampling = sampling
-        self.target_path = target_path
+        self.target_path_volume = target_path_volume
+        self.target_path_label = target_path_label
         self.length = length
         self.offset = offset
         self.test = test
@@ -42,8 +44,8 @@ class WeaponDataset(data.Dataset):
         index = index + self.offset
         index = self.index_wrapper[index]
         # Load volume and label
-        volume_n = np.load(self.target_path + str(index) + ".npy")
-        label_n = np.load(self.target_path + str(index) + "_label.npy")
+        volume_n = np.load(self.target_path_volume + str(index) + ".npy")
+        label_n = np.load(self.target_path_label + str(index) + "_label.npy")
 
         sampling_shapes_tc = [0, volume_n.shape[1] * self.side_len, volume_n.shape[2] * self.side_len,
                               volume_n.shape[3] * self.side_len]
