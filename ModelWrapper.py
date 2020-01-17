@@ -73,7 +73,7 @@ class OccupancyNetworkWrapper(object):
                 # Update parameters
                 self.occupancy_network_optimizer.step()
                 # Update loss info in progress bar
-                progress_bar.set_description('Epoch {}/{}, Loss={:.4f}'.format(epoch + 1, epoch + 1, loss.item()))
+                progress_bar.set_description('Epoch {}/{}, Loss={:.4f}'.format(epoch + 1, epochs, loss.item()))
                 # Save loss value and current epoch
                 self.logging(metric_name='train_loss', value=loss.item())
                 self.logging(metric_name='epoch', value=epoch)

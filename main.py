@@ -8,12 +8,11 @@ import os
 import Models
 import Datasets
 import ModelWrapper
- 
+
 import os
 os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 
 if __name__ == '__main__':
-    os.environ["cuda_visible_devices"] = "0"
     model = Models.OccupancyNetwork()
 #     model(torch.rand([2, 1, 80, 52, 77]), torch.rand([2 ** 15, 3]))
     ModelWrapper.OccupancyNetworkWrapper(occupancy_network=model,
@@ -26,4 +25,4 @@ if __name__ == '__main__':
                                          validation_data=None,
                                          test_data=None,
                                          loss_function=BCELoss(reduction='mean')
-                                         ).train(epochs=2)
+                                         ).train(epochs=10)
