@@ -3,7 +3,7 @@ from torch.nn import BCELoss
 import torchsummary
 import numpy as np
 import matplotlib.pyplot as plt
-
+import os
 
 import Models
 import Datasets
@@ -13,6 +13,7 @@ import os
 os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 
 if __name__ == '__main__':
+    os.environ["cuda_visible_devices"] = "0"
     model = Models.OccupancyNetwork()
 #     model(torch.rand([2, 1, 80, 52, 77]), torch.rand([2 ** 15, 3]))
     ModelWrapper.OccupancyNetworkWrapper(occupancy_network=model,
