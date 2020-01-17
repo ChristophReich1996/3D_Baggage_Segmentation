@@ -1,6 +1,6 @@
 from typing import List, Union, Tuple
 
-import numpy as np
+import torch
 import torch.nn as nn
 
 
@@ -110,10 +110,15 @@ def parse_to_list(
         return [possible_list] * length
 
 
-def many_to_one_collate_fn(batch):
-    volumes = np.stack([elm[0] for elm in batch], axis=0)
-    labels = np.stack([elm[1] for elm in batch], axis=0).reshape(-1, 3)
-    return volumes, labels
+def many_to_one_collate_fn_sample(batch, down=False):
+    volumes = torch.stack([elm[0] for elm in batch], dim=0)
+    coords = torch.stack([elm[1] for elm in batch], dim=0).view(-1, 3)
+    labels = torch.stack([elm[2] for elm in batch], dim=0).view(-1, 1)
+    if down:
+        low_volumes = torch.stack([elm[3] for elm in batch], dim=0)
+        return volumes, coords, labels, low_volumes
+    else:
+        return volumes, coords, labels
 
 
 class FilePermutation(object):

@@ -24,7 +24,7 @@ if __name__ == '__main__':
                                              npoints=2 ** 14,
                                              side_len=8,
                                              length=2600),
-                                             batch_size=9, shuffle=True, collate_fn=Misc.many_to_one_collate_fn,
+                                             batch_size=9, shuffle=True, collate_fn=Misc.many_to_one_collate_fn_sample,
                                              num_workers=9, pin_memory=True),
                                          validation_data=None,
                                          test_data=None,
