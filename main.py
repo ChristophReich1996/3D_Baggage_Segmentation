@@ -9,6 +9,7 @@ import os
 import Models
 import Datasets
 import ModelWrapper
+import Misc
 
 if __name__ == '__main__':
     # Batch size has to be a factor of the number of devices used in data parallel
@@ -23,7 +24,8 @@ if __name__ == '__main__':
                                              npoints=2 ** 14,
                                              side_len=8,
                                              length=2600),
-                                             batch_size=9, shuffle=True),
+                                             batch_size=9, shuffle=True, collate_fn=Misc.many_to_one_collate_fn,
+                                             num_workers=9, pin_memory=True),
                                          validation_data=None,
                                          test_data=None,
                                          loss_function=BCELoss(reduction='mean')
