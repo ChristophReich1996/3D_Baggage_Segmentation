@@ -50,7 +50,7 @@ class OccupancyNetworkWrapper(object):
         self.occupancy_network.train()
         self.occupancy_network.to(self.device)
         # Init progress bar
-        progress_bar = tqdm(total=epochs * len(self.training_data))
+        progress_bar = tqdm(total=epochs * len(self.training_data.dataset))
         # Init best loss variable
         best_loss = np.inf
         # Perform training

@@ -142,3 +142,4 @@ class WeaponDataset(data.Dataset):
             for i in range(label.shape[0]):
                 f.write("v " + " " + str(label[i][0]) + " " + str(label[i][1]) + " " + str(label[i][2]) +
                         " " + str(0) + " " + str(0) + " " + str(1) + "\n")
+
