@@ -2,7 +2,7 @@ from typing import List, Union, Tuple
 
 import torch
 import torch.nn as nn
-
+import numpy as np
 
 def get_activation(activation: str) -> nn.Sequential:
     """
@@ -120,6 +120,51 @@ def many_to_one_collate_fn_sample(batch, down=False):
     else:
         return volumes, coords, labels
 
+
+def draw_test(locs, actual, volume, side_len: int, batch_index: int, draw_out_path: str = ''):
+    print(type(locs), type(actual), type(volume))
+    pass
+
+    to_write = locs.cpu().numpy().astype(np.short)
+    # Only each 10th as meshlab crashes otherwise
+    to_write_act = actual[::10,:].cpu().numpy().astype(np.short)
+    # Mean (shape) centering
+    mean = np.array([volume.shape[2] * side_len/2, volume.shape[3] * side_len/2, volume.shape[4] * side_len/2])
+    to_write_act = to_write_act - mean
+    to_write = to_write - mean # np.mean(to_write, axis=0)
+
+    with open(draw_out_path + 'outfile_auto_' + batch_index + '.obj','w') as f:
+        for line in to_write:
+            f.write("v " + " " + str(line[0]) + " " + str(line[1]) + " " + str(line[2]) + 
+                " " + "0.5" + " " + "0.5" + " " + "1.0" + "\n")
+        for line in to_write_act:
+            f.write("v " + " " + str(line[0]) + " " + str(line[1]) + " " + str(line[2]) + 
+            " " + "0.19" + " " + "0.8" + " " + "0.19" + "\n")
+
+        #Corners of volume
+        f.write("v " + " " + "0"+ " " + "0" + " " + "0" + 
+            " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+
+        f.write("v " + " " + str(volume.shape[2] * side_len)+  " " + "0" + " " + "0" + 
+            " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+        
+        f.write("v " + " " + str(volume.shape[2] * side_len) +  " " + str(volume.shape[3] * side_len) + " " + "0" + 
+            " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+    
+        f.write("v " + " " + "0" +  " " + str(volume.shape[3] * side_len) + " " + "0" + 
+            " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+
+        f.write("v " + " " + "0"+ " " + "0" + " " + str(volume.shape[4] * side_len) + 
+            " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+
+        f.write("v " + " " + str(volume.shape[2] * side_len)+  " " + "0" + " " + str(volume.shape[4] * side_len) + 
+            " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+        
+        f.write("v " + " " + str(volume.shape[2] * side_len) +  " " + str(volume.shape[3] * side_len) + " " + str(volume.shape[4] * side_len)+ 
+            " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+    
+        f.write("v " + " " + "0" +  " " + str(volume.shape[3] * side_len) + " " + str(volume.shape[4] * side_len) + 
+            " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
 
 class FilePermutation(object):
     """

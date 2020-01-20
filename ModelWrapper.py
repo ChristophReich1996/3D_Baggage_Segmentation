@@ -8,7 +8,7 @@ from torch.utils.data.dataloader import DataLoader
 from datetime import datetime
 from pykdtree.kdtree import KDTree
 from torchsummary import summary
-
+from Misc import draw_test
 
 class OccupancyNetworkWrapper(object):
     """
@@ -83,11 +83,46 @@ class OccupancyNetworkWrapper(object):
                 torch.save(self.occupancy_network,
                            model_save_path + '/occupancy_network_' + self.device + '.pt')
 
-    def test(self, test_dataset, draw=True, side_len=16) -> None:
+    def test(self, draw: bool = True, side_len: int = 16, model_load_path: str = '') -> (np.ndarray, np.ndarray, np.ndarray):
         """
         Testing method
+        :param draw: (bool) If True draw output volume to file
+        :param side_len: (int) Downsampling factor of output file
+        :param model_load_path: (str) Stored model location
+        :return: (np.ndarray, np.ndarray, np.ndarray) Losses, Precision, Recall
         """
-        pass
+        
+        checkpoint = torch.load(model_load_path + '/occupancy_network_' + self.device + '.pt', map_location=lambda storage, loc: storage)
+        self.occupancy_network.load_state_dict(checkpoint)
+        del checkpoint  # dereference seems crucial
+        torch.cuda.empty_cache()
+
+        with torch.no_grad():
+            losses_test_batch = []
+            precision_test_batch = []
+            recall_test_batch = []
+            for idx, batch in enumerate(self.test_data):
+                self.occupancy_network.eval()
+                # Makes predictions
+                volume, coords, labels, actual = batch
+                yhat = self.occupancy_network.inference(volume.to(self.device), coords.to(self.device))
+                hits = torch.squeeze(yhat)
+                locs = coords[hits == 1]
+                
+                if draw:
+                    draw_test(locs, actual, volume, side_len, idx)
+
+                kd_tree = KDTree(actual.cpu().numpy(), leafsize=16)
+                dist, _ = kd_tree.query(locs.cpu().numpy(), k=1)
+                union = np.sum(dist == 0)
+                precision = union/locs.shape[0]
+                recall = union/actual.shape[0]
+                loss_test_batch = self.occupancy_network(yhat, labels.to(self.device)).item()
+                losses_test_batch.append(loss_test_batch)
+                precision_test_batch.append(precision)
+                recall_test_batch.append(recall)
+
+        return np.mean(np.array(losses_test_batch)), np.mean(np.array(precision_test_batch)), np.mean(np.array(recall_test_batch))
 
     def logging(self, metric_name: str, value: float) -> None:
         """
