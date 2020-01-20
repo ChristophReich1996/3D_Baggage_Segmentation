@@ -19,7 +19,7 @@ if __name__ == '__main__':
     ModelWrapper.OccupancyNetworkWrapper(occupancy_network=model,
                                          occupancy_network_optimizer=torch.optim.Adam(model.parameters(), lr=1e-05),
                                          training_data=DataLoader(Datasets.WeaponDataset(
-                                             target_path_volume="/fastdata/Smiths_LKA_Weapons/len_8/",
+                                             target_path_volume="/fastdata/Smiths_LKA_Weapons_Down/len_8/",
                                              target_path_label="/fastdata/Smiths_LKA_Weapons/len_1/",
                                              npoints=2 ** 14,
                                              side_len=8,
@@ -30,3 +30,5 @@ if __name__ == '__main__':
                                          test_data=None,
                                          loss_function=BCELoss(reduction='mean')
                                          ).train(epochs=10)
+
+            

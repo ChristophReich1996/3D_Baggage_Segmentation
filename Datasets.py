@@ -46,7 +46,7 @@ class WeaponDataset(data.Dataset):
         # Load volume and label
         volume_n = np.load(self.target_path_volume + str(index) + ".npy")
         label_n = np.load(self.target_path_label + str(index) + "_label.npy")
-
+        
         sampling_shapes_tc = [0, volume_n.shape[1] * self.side_len, volume_n.shape[2] * self.side_len,
                               volume_n.shape[3] * self.side_len]
         share_box = 0.5

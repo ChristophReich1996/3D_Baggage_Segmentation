@@ -397,6 +397,18 @@ class FilePermutation(object):
                         1285, 2774, 1218, 1035, 2362, 1950, 750, 1311, 2542, 991, 2383,
                         1284, 2765, 892, 1653, 1382, 2379, 354, 254]
 
+        # TODO: fix permutation
+
+        # custom permutation that only considers files that are in the directory
+        import os 
+        file_names = os.listdir('/fastdata/Smiths_LKA_Weapons_Down/len_8/')
+        ending = '_label.npy'
+        permutation = []
+        for file_name in file_names:
+            if ending in file_name:
+                permutation.append(file_name[:-len(ending)])
+    
+        self.permute = permutation
     def __getitem__(self, index: int):
         """
         Returns the permuteded index
