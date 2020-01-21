@@ -83,11 +83,16 @@ class OccupancyNetworkWrapper(object):
                 torch.save(self.occupancy_network,
                            model_save_path + '/occupancy_network_' + self.device + '.pt')
 
-    def test(self, test_dataset, draw=True, side_len=16) -> None:
+    def test(self, draw:bool=True, side_len=16) -> None:
         """
         Testing method
         """
-        pass
+        # Empty all GPU cache
+        torch.cuda.empty_cache()
+        # Dont calc gradients while training
+        with torch.no_grad():
+            for volume, coordinates, labels, actual in self.test_data:
+                pass
 
     def logging(self, metric_name: str, value: float) -> None:
         """
