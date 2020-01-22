@@ -110,16 +110,20 @@ def parse_to_list(
         return [possible_list] * length
 
 
-def many_to_one_collate_fn_sample(batch, down=False):
+def many_to_one_collate_fn_sample(batch):
     volumes = torch.stack([elm[0] for elm in batch], dim=0)
     coords = torch.stack([elm[1] for elm in batch], dim=0).view(-1, 3)
     labels = torch.stack([elm[2] for elm in batch], dim=0).view(-1, 1)
-    if down:
-        low_volumes = torch.stack([elm[3] for elm in batch], dim=0)
-        return volumes, coords, labels, low_volumes
-    else:
-        return volumes, coords, labels
+    
+    return volumes, coords, labels
 
+def many_to_one_collate_fn_sample_down(batch):
+    volumes = torch.stack([elm[0] for elm in batch], dim=0)
+    coords = torch.stack([elm[1] for elm in batch], dim=0).view(-1, 3)
+    labels = torch.stack([elm[2] for elm in batch], dim=0).view(-1, 1)
+    low_volumes = torch.stack([elm[3] for elm in batch], dim=0)
+    
+    return volumes, coords, labels, low_volumes
 
 def draw_test(locs, actual, volume, side_len: int, batch_index: int, draw_out_path: str = ''):
     print(type(locs), type(actual), type(volume))
@@ -133,7 +137,7 @@ def draw_test(locs, actual, volume, side_len: int, batch_index: int, draw_out_pa
     to_write_act = to_write_act - mean
     to_write = to_write - mean # np.mean(to_write, axis=0)
 
-    with open(draw_out_path + 'outfile_auto_' + batch_index + '.obj','w') as f:
+    with open(draw_out_path + 'outfile_auto_' + str(batch_index) + '.obj','w') as f:
         for line in to_write:
             f.write("v " + " " + str(line[0]) + " " + str(line[1]) + " " + str(line[2]) + 
                 " " + "0.5" + " " + "0.5" + " " + "1.0" + "\n")
@@ -446,7 +450,7 @@ class FilePermutation(object):
 
         # custom permutation that only considers files that are in the directory
         import os 
-        file_names = os.listdir('/fastdata/Smiths_LKA_Weapons_Down/len_8/')
+        file_names = os.listdir("/visinf/home/vilab16/3D_baggage_segmentation/Smiths_LKA_Weapons_Down/len_8/") # '/fastdata/Smiths_LKA_WeaponsDown/len_8/'
         ending = '_label.npy'
         permutation = []
         for file_name in file_names:

@@ -81,7 +81,7 @@ class OccupancyNetworkWrapper(object):
             average_loss = self.get_average_metric_for_epoch(metric_name='train_loss', epoch=epoch)
             if save_best_model and (best_loss > average_loss):
                 torch.save(self.occupancy_network,
-                           model_save_path + '/occupancy_network_' + self.device + '.pt')
+                           model_save_path + 'occupancy_network_' + self.device + '.pt')
 
     def test(self, draw: bool = True, side_len: int = 16, model_load_path: str = '') -> (np.ndarray, np.ndarray, np.ndarray):
         """
@@ -92,10 +92,10 @@ class OccupancyNetworkWrapper(object):
         :return: (np.ndarray, np.ndarray, np.ndarray) Losses, Precision, Recall
         """
         
-        checkpoint = torch.load(model_load_path + '/occupancy_network_' + self.device + '.pt', map_location=lambda storage, loc: storage)
-        self.occupancy_network.load_state_dict(checkpoint)
-        del checkpoint  # dereference seems crucial
-        torch.cuda.empty_cache()
+        # checkpoint = torch.load(model_load_path + 'occupancy_network_' + self.device + '.pt', map_location=lambda storage, loc: storage)
+        # self.occupancy_network.load_state_dict(checkpoint)
+        # del checkpoint  # dereference seems crucial
+        # torch.cuda.empty_cache()
 
         with torch.no_grad():
             losses_test_batch = []
@@ -105,7 +105,8 @@ class OccupancyNetworkWrapper(object):
                 self.occupancy_network.eval()
                 # Makes predictions
                 volume, coords, labels, actual = batch
-                yhat = self.occupancy_network.inference(volume.to(self.device), coords.to(self.device))
+                yhat = self.occupancy_network(volume.to(self.device), coords.to(self.device))
+                yhat = (yhat > 0.5).float()
                 hits = torch.squeeze(yhat)
                 locs = coords[hits == 1]
                 
