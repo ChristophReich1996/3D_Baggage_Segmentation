@@ -70,6 +70,8 @@ class Network_Generator():
         # Restore network for testing
         checkpoint = torch.load("model/" + type(self._oj_model).__name__ + "_" + str(device) + name + ".pt",
                                 map_location=lambda storage, loc: storage)
+        print("Loaded:", "model/" + type(self._oj_model).__name__ +
+              "_" + str(device) + name + ".pt")
         self._oj_model.load_state_dict(checkpoint)
         del checkpoint  # dereference seems crucial
         torch.cuda.empty_cache()
@@ -201,9 +203,9 @@ class Network_Generator():
                                     (sum_masks | sum_masks_inv).logical_not())
                                 mask_full = torch.squeeze(sum_masks)
                                 query_to_write = query[mask_full]
-                                query_to_write[:, 0] += vol_x
-                                query_to_write[:, 1] += vol_y
-                                query_to_write[:, 2] += vol_z
+                                query_to_write[:, 0] += vol_x - win_size/2
+                                query_to_write[:, 1] += vol_y - win_size/2
+                                query_to_write[:, 2] += vol_z - win_size/2
 
                                 # Write Firste one
                                 for i in range(side_len):
@@ -254,9 +256,137 @@ class Network_Generator():
                         f.write("v " + " " + str(line[0]) + " " + str(line[1]) + " " + str(line[2]) +
                                 " " + "0.0" + " " + "1.0" + " " + "0.0" + "\n")
 
+    def draw_fast(self, test_dataset, side_len, name="", down_fact=0, side_len_down=0, npoints=2**13):
+        """Draws one object with custom algorithm (not that of the ONet paper)
+
+        Arguments:
+            test_dataset {torch dataset} -- Dataset to draw one object fom
+            side_len {long} -- !!!! SKIP SIZE FOR INITIAL REQUEST !!! TODO: refactor to down_sample
+
+        Keyword Arguments:
+            name {string} -- Name of stored network file
+            down_fact {long} -- Downsampled factor for downsampled window
+            side_len_down {long} -- Extracted down sampled window size
+        """
+        # Get test set
+        loader_test = DataLoader(dataset=test_dataset, batch_size=self._size_batch,
+                                 pin_memory=False, shuffle=True, collate_fn=self._collate_fn)
+
+        # Restore network for testing
+        checkpoint = torch.load("model/" + type(self._oj_model).__name__ + "_" + str(
+            device) + name + ".pt", map_location=lambda storage, loc: storage)
+        self._oj_model.load_state_dict(checkpoint)
+        del checkpoint  # dereference seems crucial
+        torch.cuda.empty_cache()
+
+        # "historically grown"
+        down_sample = side_len
+        win_size = 32
+
+        # Create tensor to write object
+        to_write = np.empty((0, 3))
+        with torch.no_grad():
+            for batch in loader_test:
+                self._oj_model.eval()
+                volume_in, label_in = batch
+
+                # Consider any extractable window of size side_len**3 to write total object
+                for vol_x in range(0, volume_in[0].shape[1], win_size):
+                    for vol_y in range(0, volume_in[0].shape[2], win_size):
+                        for vol_z in range(0, volume_in[0].shape[3], win_size):
+                            print("x", vol_x, "y", vol_y, "z", vol_z)
+                            # Get extracted window and downsampled extracted window, SEE sample in data_interface.py for further information
+                            side_len = down_sample
+                            volume = volume_in[:, :, vol_x:vol_x+win_size,
+                                               vol_y:vol_y+win_size, vol_z:vol_z+win_size]
+
+                            if down_fact > 0 and side_len_down > 0:
+                                x_start_down = int(vol_x + side_len/2)
+                                y_start_down = int(vol_y + side_len/2)
+                                z_start_down = int(vol_z + side_len/2)
+
+                                pad_x_front = max(
+                                    down_fact * side_len_down - x_start_down, 0)
+                                pad_y_front = max(
+                                    down_fact * side_len_down - y_start_down, 0)
+                                pad_z_front = max(
+                                    down_fact * side_len_down - z_start_down, 0)
+
+                                pad_x_back = max(
+                                    down_fact * side_len_down - (volume_in[0].shape[1] - x_start_down), 0)
+                                pad_y_back = max(
+                                    down_fact * side_len_down - (volume_in[0].shape[2] - y_start_down), 0)
+                                pad_z_back = max(
+                                    down_fact * side_len_down - (volume_in[0].shape[3] - z_start_down), 0)
+
+                                volume_down = np.pad(volume_in[0], ((
+                                    0, 0), (pad_x_front, pad_x_back), (pad_y_front, pad_y_back), (pad_z_front, pad_z_back)))
+                                volume_down = torch.from_numpy(volume_down[:, x_start_down + pad_x_front - side_len_down * down_fact:x_start_down + pad_x_front + side_len_down * down_fact,
+                                                                           y_start_down + pad_y_front - side_len_down * down_fact:y_start_down + pad_y_front + side_len_down * down_fact,
+                                                                           z_start_down + pad_z_front - side_len_down * down_fact:z_start_down + pad_z_front + side_len_down * down_fact]).to(device)
+                                volume_down = nn.functional.avg_pool3d(
+                                    volume_down, down_fact, down_fact)
+                                volume_down = torch.unsqueeze(
+                                    volume_down, dim=0).float()
+
+                            volume = np.pad(volume, ((0, 0), (0, 0),
+                                                     (0, max(win_size - volume[0].shape[1], 0)), (0, max(win_size - volume[0].shape[2], 0)), (0, max(win_size - volume[0].shape[3], 0))))
+                            volume = torch.from_numpy(volume).float()
+
+                            x_n = np.random.randint(
+                                volume.shape[2], size=(int(npoints), 1))
+                            y_n = np.random.randint(
+                                volume.shape[3], size=(int(npoints), 1))
+                            z_n = np.random.randint(
+                                volume.shape[4], size=(int(npoints), 1))
+                            coords_sampled = np.concatenate(
+                                (x_n, y_n, z_n), axis=1).astype(np.float)
+                            coords_sampled_torch = torch.from_numpy(
+                                coords_sampled).float()
+
+                            yhat = self._oj_model.inference(volume.to(device), coords_sampled_torch.to(
+                                device), volume_down.to(device))
+
+                            coords_hit = coords_sampled_torch[torch.squeeze(
+                                yhat == 1)].cpu().numpy()
+                            coords_hit[:, 0] += vol_x - win_size/2
+                            coords_hit[:, 1] += vol_y - win_size/2
+                            coords_hit[:, 2] += vol_z - win_size/2
+                            to_write = np.append(
+                                to_write, coords_hit, axis=0)
+
+                # Write actual object, predicted object and total volume
+
+                to_write = to_write.astype(np.short)
+                to_write_labels = label_in.astype(np.short)
+
+                with open('outfile_auto.obj', 'w') as f:
+                    for line in to_write:
+                        f.write("v " + " " + str(line[0]) + " " + str(line[1]) + " " + str(line[2]) +
+                                " " + "0.0" + " " + "0.0" + " " + "0.5  " + "\n")
+
+                vol = volume_in[0]
+                maximum = np.max(vol)
+                vol = vol/maximum
+                vol[vol - 0.17 < 0] = 0
+
+                with open('outfile_org.obj', 'w') as f:
+                    for i in range(vol.shape[1]):
+                        for j in range(vol.shape[2]):
+                            for k in range(vol.shape[3]):
+                                color = vol[0][i][j][k]
+                                if color == 0:
+                                    continue
+                                f.write("v " + " " + str(i) + " " + str(j) + " " + str(k) +
+                                        " " + str(color.item()) + " " + str(0.5) + " " + str(0.5) + "\n")
+
+                with open('outfile_auto_labels.obj', 'w') as f:
+                    for line in to_write_labels:
+                        f.write("v " + " " + str(line[0]) + " " + str(line[1]) + " " + str(line[2]) +
+                                " " + "0.0" + " " + "1.0" + " " + "0.0" + "\n")
     # Validate, ignore grads
 
-    def _val(self, loader_val, losses_val, npoints, side_len, down_fact, side_len_down, iou=False):
+    def _val(self, loader_val, losses_val, npoints, side_len, down_fact, side_len_down, iou=False, num_iterations=1):
         """Validate wrapped network
 
         Arguments:
@@ -279,43 +409,44 @@ class Network_Generator():
             # Cache vol and labels to process 8 at a time
             cache_vol = []
             cache_labels = []
-            for j, batch in enumerate(loader_val):
-                cache_vol.append(batch[0])
-                cache_labels.append(batch[1])
+            for iteration in range(num_iterations):
+                for j, batch in enumerate(loader_val):
+                    cache_vol.append(batch[0])
+                    cache_labels.append(batch[1])
 
-                # After 8 volumes and labels are cache, validate
-                if j % 8 == 7:
-                    samples = []
-                    for i in range(8):
-                        # Sample volume, to get original volume back,
-                        # as well as downsampled volume, coords, and corresponding labels
-                        samp = sample(cache_vol[i], cache_labels[i], npoints=npoints, side_len=side_len, test=False,
-                                      down_fact=down_fact, side_len_down=side_len_down)
-                        if samp is None:
-                            continue
-                        samples.append(samp)
-                    # Put samples together to get a batch that can be given to network
-                    batch_in = many_to_one_collate_fn_sample(
-                        samples, down=True)
-                    volume, coords, labels, volume_down = batch_in
+                    # After 8 volumes and labels are cache, validate
+                    if j % 8 == 7:
+                        samples = []
+                        for i in range(8):
+                            # Sample volume, to get original volume back,
+                            # as well as downsampled volume, coords, and corresponding labels
+                            samp = sample(cache_vol[i], cache_labels[i], npoints=npoints, side_len=side_len, test=False,
+                                          down_fact=down_fact, side_len_down=side_len_down, share_box=0.0)
+                            if samp is None:
+                                continue
+                            samples.append(samp)
+                        # Put samples together to get a batch that can be given to network
+                        batch_in = many_to_one_collate_fn_sample(
+                            samples, down=True)
+                        volume, coords, labels, volume_down = batch_in
 
-                    self._oj_model.eval()
-                    # Eval network
-                    yhat = self._oj_model(volume.to(device), coords.to(
-                        device), volume_down.to(device))
-                    # Computes validation loss
-                    loss_val_batch = self._oj_loss(
-                        yhat, labels.to(device)).item()
-                    # If iou set, calcl IOU
-                    if iou:
-                        loss_iou_batch = layers.IOU(
-                            coords, yhat, labels, volume.shape[0])
-                        losses_iou_batch.append(loss_iou_batch)
-                    losses_val_batch.append(loss_val_batch)
-                    cache_vol = []
-                    cache_labels = []
-                    # Urgently needed due to incredibly bad garbage collection by python
-                    gc.collect()
+                        self._oj_model.eval()
+                        # Eval network
+                        yhat = self._oj_model(volume.to(device), coords.to(
+                            device), volume_down.to(device))
+                        # Computes validation loss
+                        loss_val_batch = self._oj_loss(
+                            yhat, labels.to(device)).item()
+                        # If iou set, calcl IOU
+                        if iou:
+                            loss_iou_batch = layers.IOU(
+                                coords, yhat, labels, volume.shape[0])
+                            losses_iou_batch.append(loss_iou_batch)
+                        losses_val_batch.append(loss_val_batch)
+                        cache_vol = []
+                        cache_labels = []
+                        # Urgently needed due to incredibly bad garbage collection by python
+                        gc.collect()
 
             loss_val = np.mean(losses_val_batch)
             loss_iou = np.mean(losses_iou_batch)
@@ -326,7 +457,7 @@ class Network_Generator():
                 return loss_val
 
     def train(self, train_dataset, val_dataset, side_len, npoints, name, load=False,
-              cache_size=1000, win_sampled_size=16, down_fact=0, side_len_down=0):
+              cache_size=1000, win_sampled_size=16, down_fact=0, side_len_down=0, cache_type='fifo'):
         """Train wrapped network
 
         Arguments:
@@ -345,7 +476,7 @@ class Network_Generator():
         """
 
         # Function vars ++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-        loss_best = float('inf')
+        loss_best = 0
         losses_train = []
         losses_val = []
         # Create loader for validation and training sets
@@ -362,7 +493,7 @@ class Network_Generator():
 
         # Auxiliary functions ++++++++++++++++++++++++++++++++++++++++++++++++++
         # Make a training step
-        def _step_train(batch):
+        def _step_train(batch, optimize=True):
             # Split batch in components
             volume, coords, labels, volume_low = batch
             self._oj_model.train()
@@ -374,10 +505,14 @@ class Network_Generator():
             # Calc gradients
             loss_train.backward()
             # Do a optimizer step and set gradients to zero
-            self._oj_optimizer.step()
-            self._oj_optimizer.zero_grad()
+            if optimize:
+                self._oj_optimizer.step()
+                self._oj_optimizer.zero_grad()
+            labels_on_device = labels.to(device)
 
-            return loss_train.item(), self.mse(yhat, labels.to(device)).item()
+            return loss_train.item(), self.mse(yhat, labels_on_device).item(), \
+                torch.squeeze(torch.mean(nn.BCELoss(reduction='none')(yhat.reshape(win_sampled_size, -1, 1),
+                                                                      labels_on_device.reshape(win_sampled_size, -1, 1)), dim=1))
 
         # Logic ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
         for _ in range(self._size_iter):
@@ -387,60 +522,107 @@ class Network_Generator():
             cache_vol = [None for x in range(cache_size)]
             cache_labels = [None for x in range(cache_size)]
             # Remember how often an element has been drawn
-            draw_counts = np.array([-1 for x in range(cache_size)])
+            draw_counts = np.array([0 for x in range(cache_size)])
             cache_act_size = 0
 
             for i_, batch in enumerate(loader_train):
                 # First fill cache, if filled, replace most often draw example
-                where_to_put = np.argmax(
-                    draw_counts) if cache_act_size == cache_size else i_
-                # Cache volume and labels
-                cache_vol[where_to_put] = batch[0]
-                cache_labels[where_to_put] = batch[1]
-                # Reset draw count
-                draw_counts[where_to_put] = 0
-                cache_act_size += 1
-                cache_act_size = min(cache_act_size, cache_size)
-                # Urgently needed due to incredibly bad garbage collection by python
-                gc.collect()
 
-                # One step of training
-                for j in range(1):
-                    # Randomly draw win_sampled_size many examples to foram a batch
+                if cache_type == 'fifo':
+                    where_to_put = i_ % cache_size
+                    # Cache volume and labels
+                    cache_vol[where_to_put] = batch[0]
+                    cache_labels[where_to_put] = batch[1]
+
+                    cache_act_size += 1
+                    cache_act_size = min(cache_act_size, cache_size)
+                    # Urgently needed due to incredibly bad garbage collection by python
+                    gc.collect()
+
+                    # One step of training
+
+                    # Randomly draw win_sampled_size many examples to form a batch
                     indices = np.random.choice(
                         cache_act_size, win_sampled_size)
-                    draw_counts[indices] += 1
-                    samples = []
-                    # Sample each example
-                    for i in indices:
-                        samp = sample(cache_vol[i], cache_labels[i], npoints=npoints,
-                                      side_len=side_len, test=False, down_fact=down_fact, side_len_down=side_len_down)
-                        if samp is None:
-                            continue
-                        samples.append(samp)
-                    # Create a batch
-                    batch_in = many_to_one_collate_fn_sample(
-                        samples, down=True)
-                    t = utils.Timer()
-                    # Perform a training step
-                    loss_train_batch, mse_train_batch = _step_train(batch_in)
-                    print("Training Loss Batch", i_, loss_train_batch,
-                          mse_train_batch, flush=True)
+
+                elif cache_type == 'counts':
+                    # First fill cache, if filled, replace most often draw example
+                    where_to_put = np.argmax(
+                        draw_counts) if cache_act_size == cache_size else i_
+                    # Cache volume and labels
+                    cache_vol[where_to_put] = batch[0]
+                    cache_labels[where_to_put] = batch[1]
+                    # Reset draw count
+                    draw_counts[where_to_put] = 0
+                    cache_act_size += 1
+                    cache_act_size = min(cache_act_size, cache_size)
+                    # Urgently needed due to incredibly bad garbage collection by python
+                    gc.collect()
+
+                    # One step of training
+
+                    # Randomly draw win_sampled_size many examples to form a batch
+                    sum_draw_counts = np.exp(-draw_counts[:cache_act_size])
+                    indices = np.random.choice(
+                        cache_act_size, win_sampled_size, p=sum_draw_counts/np.sum(sum_draw_counts))
+
+                elif cache_type == 'hardness':
+                    # First fill cache, if filled, replace most often draw example
+                    where_to_put = np.argmin(
+                        draw_counts) if cache_act_size == cache_size else i_
+                    # Cache volume and labels
+                    cache_vol[where_to_put] = batch[0]
+                    cache_labels[where_to_put] = batch[1]
+                    # Reset draw count
+                    draw_counts[where_to_put] = 10
+                    cache_act_size += 1
+                    cache_act_size = min(cache_act_size, cache_size)
+                    # Urgently needed due to incredibly bad garbage collection by python
+                    gc.collect()
+
+                    # One step of training
+
+                    # Randomly draw win_sampled_size many examples to form a batch
+                    sum_draw_counts = np.exp(draw_counts[:cache_act_size])
+                    indices = np.random.choice(
+                        cache_act_size, win_sampled_size, p=sum_draw_counts/np.sum(sum_draw_counts))
+
+                samples = []
+                for i in indices:
+                    samp = sample(cache_vol[i], cache_labels[i], npoints=npoints,
+                                  side_len=side_len, test=False, down_fact=down_fact, side_len_down=side_len_down)
+                    if samp is None:
+                        continue
+                    samples.append(samp)
+                # Create a batch
+                batch_in = many_to_one_collate_fn_sample(samples, down=True)
+                # Perform a training step
+                loss_train_batch, mse_train_batch, loss_train_samples = _step_train(
+                    batch_in, True)
+
+                for x, i in enumerate(indices):
+                    if cache_type == 'hardness':
+                        draw_counts[i] = loss_train_samples[x]
+                    elif cache_type == 'counts':
+                        draw_counts[i] += 1
+
+                if i_ % 32 == 32-1:
+                    print("Training Loss Batch", _, i_, type(self._oj_loss).__name__, loss_train_batch,
+                          "MSE", mse_train_batch, flush=True)
 
                 if i_ % self._size_print_every == self._size_print_every-1:
-                    loss_val = self._val(loader_val, losses_val, npoints=npoints, side_len=side_len,
-                                         down_fact=down_fact, side_len_down=side_len_down)
-                    print("Validation Loss", loss_val)
-
-                    if loss_val < loss_best:
-                        loss_best = loss_val
+                    loss_val, iou = self._val(loader_val, losses_val, npoints=npoints, side_len=side_len,
+                                              down_fact=down_fact, side_len_down=side_len_down, iou=True)
+                    print("Validation Loss", loss_val,
+                          "IOU", iou, "Best IOU", loss_best)
+                    if iou > loss_best:
+                        loss_best = iou
                         torch.save(self._oj_model.state_dict(
                         ), "model/" + type(self._oj_model).__name__ + "_" + str(device) + name + ".pt")
                         torch.save(self._oj_optimizer.state_dict(
                         ), "optimizer/" + type(self._oj_model).__name__ + "_" + str(device) + name + ".pt")
             loss_train = np.mean(losses_train_batch)
             losses_train.append(loss_train)
-            print("Training Loss Iteration", loss_train, flush=True)
 
 
 class Res_Auto_3d_Model_Occu_Parallel(nn.Module):
@@ -469,7 +651,7 @@ class Res_Auto_3d_Model_Occu_Parallel(nn.Module):
         return mines[0].item(), maxes[0].item(), mines[1].item(), maxes[1].item(), mines[2].item(), maxes[2].item()
 
     def inference(self, volume, coords, volume_low):
-        return (torch.sign(self.forward(volume, coords, volume_low) - 0.8) + 1) / 2
+        return (torch.sign(self.forward(volume, coords, volume_low) - 0.7) + 1) / 2
 
 
 class Res_Auto_3d_Model_Occu(nn.Module):

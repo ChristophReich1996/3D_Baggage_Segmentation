@@ -15,7 +15,7 @@ parser.add_argument('-sld', '-side_len_down',
                     required='True', choices=['4', '8', '16', '32'])
 # Downsampling factor
 parser.add_argument('-df', '-down_factor', required='True',
-                    choices=['4', '8', '16', '32'])
+                    choices=['2', '4', '8', '16', '32'])
 # Number of points to sample
 parser.add_argument('-np', '-npoints', required='True',
                     type=int, choices=range(14))
@@ -41,7 +41,7 @@ i = int(args.i)
 action = args.a
 
 length = 1 if action == 'draw' else 200
-offset = 2890 if action == 'draw' else 2729
+offset = 2791 if action == 'draw' else 2729
 print("Load Dataset:", end=" ", flush=True)
 test_dataset = WeaponDataset(target_path="../../../../fastdata/Smiths_LKA_Weapons/len_1/",
                              length=length,
@@ -64,8 +64,8 @@ print("", flush=True)
 print("Testing", flush=True)
 
 if action == 'draw':
-    network.draw(test_dataset, 1, name, down_fact=down_fact,
-                 side_len_down=side_len_down)
+    network.draw_fast(test_dataset, 1, name, down_fact=down_fact,
+                      side_len_down=side_len_down)
 else:
     print(network.test(test_dataset=test_dataset,
                        side_len=side_len,

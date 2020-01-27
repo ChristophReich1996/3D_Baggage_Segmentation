@@ -125,18 +125,50 @@ class Res_Block_Up_1D(nn.Module):
 
 
 # Scores ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+class DiceLoss(nn.Module):
+    def __init__(self, batch_size):
+        self.batch_size = batch_size
 
-def dice_loss(input, target):
-    smoothness = 1.
+    def forward(self, y_true, y_pred):
+        y_true = y_true.reshape(self.batch_size, -1, 1)
+        y_pred = y_pred.reshape(self.batch_size, -1, 1)
+        y_true = torch.squeeze(y_true)
+        y_pred = torch.squeeze(y_pred)
+        numerator = 2 * torch.sum(y_true * y_pred, dim=1)
+        denominator = torch.sum(y_true + y_pred, dim=1)
+        quot = 1 - numerator / denominator
 
-    i_ = input.reshape(-1)
-    t_ = target.reshape(-1)
-    intersection = (i_ * t_).sum()
+        invert_index = torch.sum(y_true, dim=1) == 0
+        quot[invert_index] = torch.sum(
+            y_pred[invert_index], dim=1)/y_true.shape[1]
+        return torch.mean(quot)
 
-    return -1 * ((2. * intersection + smoothness) / (i_.sum() + t_.sum() + smoothness))
+
+class FocalLoss(nn.Module):
+    # See Kaggle
+    def __init__(self, alpha=1, gamma=2, logits=False, reduce=True):
+        super(FocalLoss, self).__init__()
+        self.alpha = alpha
+        self.gamma = gamma
+        self.logits = logits
+        self.reduce = reduce
+
+    def forward(self, inputs, targets):
+        if self.logits:
+            BCE_loss = F.binary_cross_entropy_with_logits(
+                inputs, targets, reduce=False)
+        else:
+            BCE_loss = F.binary_cross_entropy(inputs, targets, reduce=False)
+        pt = torch.exp(-BCE_loss)
+        F_loss = self.alpha * (1-pt)**self.gamma * BCE_loss
+
+        if self.reduce:
+            return torch.mean(F_loss)
+        else:
+            return F_loss
 
 
-def IOU(coords, yhat, labels, batch_size, threshold=0.9):
+def IOU(coords, yhat, labels, batch_size, threshold=0.7):
     coords = coords.reshape(batch_size, -1, 3)
     yhat = yhat.reshape(batch_size, -1, 1)
     labels = labels.reshape(batch_size, -1, 1)
