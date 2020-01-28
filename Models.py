@@ -31,7 +31,7 @@ class OccupancyNetwork(nn.Module):
                  [(180 + 3, 256), (256, 256), (256, 512), (512, 256), (256, 256), (256, 1)],
                  activation_decoding: Union[str, List[str]] = 'prelu',
                  normalization_decoding: Union[str, List[str]] = 'batchnorm',
-                 dropout_rate_decoding: Union[float, List[float]] = 0.0,
+                 dropout_rate_decoding: Union[float, List[float]] = [.05, .05, .05, .05, .05, 0],
                  bias_decoding: Union[bool, List[bool]] = True,
                  bias_residual_decoding: Union[bool, List[bool]] = True,
                  output_activation: str = 'sigmoid') -> None:

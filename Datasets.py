@@ -10,7 +10,7 @@ import Misc
 
 class WeaponDataset(data.Dataset):
     def __init__(self, target_path_volume: str, target_path_label: str, length: int, dim_max: int = 640, npoints: int = 2 ** 10, side_len: int = 32,
-                 sampling: str = 'one', offset: int = 0, test: bool = False) -> None:
+                 sampling: str = 'one', offset: int = 0, test: bool = False, share_box: float = 0.5) -> None:
         """
         Constructor method
         :param target_path_volume: (str)
@@ -21,6 +21,7 @@ class WeaponDataset(data.Dataset):
         :param side_len: (int)
         :param sampling: (str)
         :param offset: (int)
+        :param share_box: (float)
         :param test: (bool)
         """
         self.npoints = npoints
@@ -33,6 +34,7 @@ class WeaponDataset(data.Dataset):
         self.offset = offset
         self.test = test
         self.index_wrapper = Misc.FilePermutation()
+        self.share_box=share_box
 
     def __getitem__(self, index: int) -> Tuple[torch.tensor]:
         """
@@ -49,7 +51,6 @@ class WeaponDataset(data.Dataset):
         
         sampling_shapes_tc = [0, volume_n.shape[1] * self.side_len, volume_n.shape[2] * self.side_len,
                               volume_n.shape[3] * self.side_len]
-        share_box = 0.5
 
         if self.sampling == 'default':
             # Mixed Coords
@@ -66,12 +67,12 @@ class WeaponDataset(data.Dataset):
 
         elif self.sampling == 'one_fast':
             # Coords with one as label
-            coords_one = label_n[np.random.choice(label_n.shape[0], int(self.npoints * share_box), replace=False), :]
+            coords_one = label_n[np.random.choice(label_n.shape[0], int(self.npoints * self.share_box), replace=False), :]
 
             # Mixed Coords
-            x_n = np.random.randint(sampling_shapes_tc[1], size=(int(self.npoints * (1 - share_box)), 1))
-            y_n = np.random.randint(sampling_shapes_tc[2], size=(int(self.npoints * (1 - share_box)), 1))
-            z_n = np.random.randint(sampling_shapes_tc[3], size=(int(self.npoints * (1 - share_box)), 1))
+            x_n = np.random.randint(sampling_shapes_tc[1], size=(int(self.npoints * (1 - self.share_box)), 1))
+            y_n = np.random.randint(sampling_shapes_tc[2], size=(int(self.npoints * (1 - self.share_box)), 1))
+            z_n = np.random.randint(sampling_shapes_tc[3], size=(int(self.npoints * (1 - self.share_box)), 1))
             coords_zero = np.concatenate((x_n, y_n, z_n), axis=1)
 
             coords = np.concatenate((coords_one, coords_zero), axis=0)
@@ -79,12 +80,12 @@ class WeaponDataset(data.Dataset):
 
         elif self.sampling == 'one':
             # Coords with one as label
-            coords_one = label_n[np.random.choice(label_n.shape[0], int(self.npoints * share_box), replace=False), :]
+            coords_one = label_n[np.random.choice(label_n.shape[0], int(self.npoints * self.share_box), replace=False), :]
 
             # Mixed Coords
-            x_n = np.random.randint(sampling_shapes_tc[1], size=(int(self.npoints * (1 - share_box)), 1))
-            y_n = np.random.randint(sampling_shapes_tc[2], size=(int(self.npoints * (1 - share_box)), 1))
-            z_n = np.random.randint(sampling_shapes_tc[3], size=(int(self.npoints * (1 - share_box)), 1))
+            x_n = np.random.randint(sampling_shapes_tc[1], size=(int(self.npoints * (1 - self.share_box)), 1))
+            y_n = np.random.randint(sampling_shapes_tc[2], size=(int(self.npoints * (1 - self.share_box)), 1))
+            z_n = np.random.randint(sampling_shapes_tc[3], size=(int(self.npoints * (1 - self.share_box)), 1))
             coords_zero = np.concatenate((x_n, y_n, z_n), axis=1)
             kd_tree = KDTree(label_n, leafsize=16)
             dist, _ = kd_tree.query(coords_zero, k=1)

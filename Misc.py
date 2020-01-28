@@ -125,22 +125,58 @@ def many_to_one_collate_fn_sample_down(batch):
     
     return volumes, coords, labels, low_volumes
 
-def draw_test(locs, actual, volume, side_len: int, batch_index: int, draw_out_path: str = ''):
-    print(type(locs), type(actual), type(volume))
-    pass
-
+def draw_test(locs, actual, volume, side_len: int, batch_index: int, draw_out_path: str = 'obj/'):
+    
+    if batch_index % 25 != 0:
+        return
+  
     to_write = locs.cpu().numpy().astype(np.short)
     # Only each 10th as meshlab crashes otherwise
-    to_write_act = actual[::10,:].cpu().numpy().astype(np.short)
+    to_write_act = actual[::10,:].cpu().numpy().astype(np.short) #actual[::10,:]
     # Mean (shape) centering
     mean = np.array([volume.shape[2] * side_len/2, volume.shape[3] * side_len/2, volume.shape[4] * side_len/2])
     to_write_act = to_write_act - mean
     to_write = to_write - mean # np.mean(to_write, axis=0)
 
-    with open(draw_out_path + 'outfile_auto_' + str(batch_index) + '.obj','w') as f:
+    # print(locs.shape, to_write.shape, actual.shape, to_write_act.shape)
+
+    with open(draw_out_path + str(batch_index) + '_outfile_pred.obj','w') as f:
         for line in to_write:
             f.write("v " + " " + str(line[0]) + " " + str(line[1]) + " " + str(line[2]) + 
                 " " + "0.5" + " " + "0.5" + " " + "1.0" + "\n")
+        # for line in to_write_act:
+        #     f.write("v " + " " + str(line[0]) + " " + str(line[1]) + " " + str(line[2]) + 
+        #     " " + "0.19" + " " + "0.8" + " " + "0.19" + "\n")
+
+        #Corners of volume
+        f.write("v " + " " + "0"+ " " + "0" + " " + "0" + 
+            " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+
+        f.write("v " + " " + str(volume.shape[2] * side_len)+  " " + "0" + " " + "0" + 
+            " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+        
+        f.write("v " + " " + str(volume.shape[2] * side_len) +  " " + str(volume.shape[3] * side_len) + " " + "0" + 
+            " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+    
+        f.write("v " + " " + "0" +  " " + str(volume.shape[3] * side_len) + " " + "0" + 
+            " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+
+        f.write("v " + " " + "0"+ " " + "0" + " " + str(volume.shape[4] * side_len) + 
+            " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+
+        f.write("v " + " " + str(volume.shape[2] * side_len)+  " " + "0" + " " + str(volume.shape[4] * side_len) + 
+            " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+        
+        f.write("v " + " " + str(volume.shape[2] * side_len) +  " " + str(volume.shape[3] * side_len) + " " + str(volume.shape[4] * side_len)+ 
+            " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+    
+        f.write("v " + " " + "0" +  " " + str(volume.shape[3] * side_len) + " " + str(volume.shape[4] * side_len) + 
+            " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+
+    with open(draw_out_path + str(batch_index) + '_outfile_label.obj','w') as f:
+        # for line in to_write:
+        #     f.write("v " + " " + str(line[0]) + " " + str(line[1]) + " " + str(line[2]) + 
+        #         " " + "0.5" + " " + "0.5" + " " + "1.0" + "\n")
         for line in to_write_act:
             f.write("v " + " " + str(line[0]) + " " + str(line[1]) + " " + str(line[2]) + 
             " " + "0.19" + " " + "0.8" + " " + "0.19" + "\n")

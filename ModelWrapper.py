@@ -83,7 +83,7 @@ class OccupancyNetworkWrapper(object):
                 torch.save(self.occupancy_network,
                            model_save_path + 'occupancy_network_' + self.device + '.pt')
 
-    def test(self, draw: bool = True, side_len: int = 16, model_load_path: str = '') -> (np.ndarray, np.ndarray, np.ndarray):
+    def test(self, draw: bool = True, side_len: int = 1, model_load_path: str = '') -> (np.ndarray, np.ndarray, np.ndarray):
         """
         Testing method
         :param draw: (bool) If True draw output volume to file
@@ -105,25 +105,43 @@ class OccupancyNetworkWrapper(object):
                 self.occupancy_network.eval()
                 # Makes predictions
                 volume, coords, labels, actual = batch
+
+                # print(volume.shape, coords.shape, labels.shape, actual.shape)
                 yhat = self.occupancy_network(volume.to(self.device), coords.to(self.device))
                 yhat = (yhat > 0.5).float()
                 hits = torch.squeeze(yhat)
                 locs = coords[hits == 1]
                 
+                actual = actual.reshape(-1,3)
+
                 if draw:
                     draw_test(locs, actual, volume, side_len, idx)
 
                 kd_tree = KDTree(actual.cpu().numpy(), leafsize=16)
                 dist, _ = kd_tree.query(locs.cpu().numpy(), k=1)
                 union = np.sum(dist == 0)
-                precision = union/locs.shape[0]
-                recall = union/actual.shape[0]
-                loss_test_batch = self.occupancy_network(yhat, labels.to(self.device)).item()
-                losses_test_batch.append(loss_test_batch)
-                precision_test_batch.append(precision)
-                recall_test_batch.append(recall)
+                
+                if union != 0:
+                    precision = union/locs.shape[0]
+                    recall = union/actual.shape[0]
 
-        return np.mean(np.array(losses_test_batch)), np.mean(np.array(precision_test_batch)), np.mean(np.array(recall_test_batch))
+                    loss_test_batch = self.loss_function(yhat, labels.to(self.device)).item()
+                    losses_test_batch.append(loss_test_batch)
+                    precision_test_batch.append(precision)
+                    recall_test_batch.append(recall)
+                else:
+                    continue
+
+                # loss_test_batch = self.loss_function(yhat, labels.to(self.device)).item()
+                # losses_test_batch.append(loss_test_batch)
+                # precision_test_batch.append(precision)
+                # recall_test_batch.append(recall)
+
+        loss, precision, recall = np.mean(np.array(losses_test_batch)), np.mean(np.array(precision_test_batch)), np.mean(np.array(recall_test_batch)) 
+
+        print(f'losses_test_batch: {loss}, precision_test_batch: {precision}, recall_test_batch: {recall}')
+
+        return loss, precision, recall
 
     def logging(self, metric_name: str, value: float) -> None:
         """
