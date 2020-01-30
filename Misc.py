@@ -6,6 +6,11 @@ import numpy as np
 
 
 def intersection_over_union(prediction: torch.tensor, label: torch.tensor, threshold: float = 0.5) -> torch.tensor:
+    # Check sizes
+    assert prediction.numel() == label.numel(), 'Number of elements in prediction and label must match'
+    # Reshape tensors
+    prediction = prediction.view(-1)
+    label = label.view(-1)
     # Apply threshold
     prediction = (prediction > threshold).float()
     # Calc intersect
