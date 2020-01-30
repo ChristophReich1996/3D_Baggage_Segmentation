@@ -4,6 +4,18 @@ import torch
 import torch.nn as nn
 import numpy as np
 
+
+def intersection_over_union(prediction: torch.tensor, label: torch.tensor, threshold: float = 0.5) -> torch.tensor:
+    # Apply threshold
+    prediction = (prediction > threshold).float()
+    # Clac intersect
+    intersection = torch.sum(((prediction + label) == 2).float())
+    union = torch.sum(((prediction + label) >= 1).float())
+    # Calc iou
+    iou = intersection / (union + 1e-9)
+    return iou
+
+
 def get_activation(activation: str) -> nn.Sequential:
     """
     Method to return different types of activation functions
@@ -114,16 +126,18 @@ def many_to_one_collate_fn_sample(batch):
     volumes = torch.stack([elm[0] for elm in batch], dim=0)
     coords = torch.stack([elm[1] for elm in batch], dim=0).view(-1, 3)
     labels = torch.stack([elm[2] for elm in batch], dim=0).view(-1, 1)
-    
+
     return volumes, coords, labels
+
 
 def many_to_one_collate_fn_sample_down(batch):
     volumes = torch.stack([elm[0] for elm in batch], dim=0)
     coords = torch.stack([elm[1] for elm in batch], dim=0).view(-1, 3)
     labels = torch.stack([elm[2] for elm in batch], dim=0).view(-1, 1)
     low_volumes = torch.stack([elm[3] for elm in batch], dim=0)
-    
+
     return volumes, coords, labels, low_volumes
+
 
 def draw_test(locs, actual, volume, side_len: int, batch_index: int, draw_out_path: str = ''):
     print(type(locs), type(actual), type(volume))
@@ -131,44 +145,46 @@ def draw_test(locs, actual, volume, side_len: int, batch_index: int, draw_out_pa
 
     to_write = locs.cpu().numpy().astype(np.short)
     # Only each 10th as meshlab crashes otherwise
-    to_write_act = actual[::10,:].cpu().numpy().astype(np.short)
+    to_write_act = actual[::10, :].cpu().numpy().astype(np.short)
     # Mean (shape) centering
-    mean = np.array([volume.shape[2] * side_len/2, volume.shape[3] * side_len/2, volume.shape[4] * side_len/2])
+    mean = np.array([volume.shape[2] * side_len / 2, volume.shape[3] * side_len / 2, volume.shape[4] * side_len / 2])
     to_write_act = to_write_act - mean
-    to_write = to_write - mean # np.mean(to_write, axis=0)
+    to_write = to_write - mean  # np.mean(to_write, axis=0)
 
-    with open(draw_out_path + 'outfile_auto_' + str(batch_index) + '.obj','w') as f:
+    with open(draw_out_path + 'outfile_auto_' + str(batch_index) + '.obj', 'w') as f:
         for line in to_write:
-            f.write("v " + " " + str(line[0]) + " " + str(line[1]) + " " + str(line[2]) + 
-                " " + "0.5" + " " + "0.5" + " " + "1.0" + "\n")
+            f.write("v " + " " + str(line[0]) + " " + str(line[1]) + " " + str(line[2]) +
+                    " " + "0.5" + " " + "0.5" + " " + "1.0" + "\n")
         for line in to_write_act:
-            f.write("v " + " " + str(line[0]) + " " + str(line[1]) + " " + str(line[2]) + 
-            " " + "0.19" + " " + "0.8" + " " + "0.19" + "\n")
+            f.write("v " + " " + str(line[0]) + " " + str(line[1]) + " " + str(line[2]) +
+                    " " + "0.19" + " " + "0.8" + " " + "0.19" + "\n")
 
-        #Corners of volume
-        f.write("v " + " " + "0"+ " " + "0" + " " + "0" + 
-            " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+        # Corners of volume
+        f.write("v " + " " + "0" + " " + "0" + " " + "0" +
+                " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
 
-        f.write("v " + " " + str(volume.shape[2] * side_len)+  " " + "0" + " " + "0" + 
-            " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
-        
-        f.write("v " + " " + str(volume.shape[2] * side_len) +  " " + str(volume.shape[3] * side_len) + " " + "0" + 
-            " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
-    
-        f.write("v " + " " + "0" +  " " + str(volume.shape[3] * side_len) + " " + "0" + 
-            " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+        f.write("v " + " " + str(volume.shape[2] * side_len) + " " + "0" + " " + "0" +
+                " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
 
-        f.write("v " + " " + "0"+ " " + "0" + " " + str(volume.shape[4] * side_len) + 
-            " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+        f.write("v " + " " + str(volume.shape[2] * side_len) + " " + str(volume.shape[3] * side_len) + " " + "0" +
+                " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
 
-        f.write("v " + " " + str(volume.shape[2] * side_len)+  " " + "0" + " " + str(volume.shape[4] * side_len) + 
-            " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
-        
-        f.write("v " + " " + str(volume.shape[2] * side_len) +  " " + str(volume.shape[3] * side_len) + " " + str(volume.shape[4] * side_len)+ 
-            " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
-    
-        f.write("v " + " " + "0" +  " " + str(volume.shape[3] * side_len) + " " + str(volume.shape[4] * side_len) + 
-            " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+        f.write("v " + " " + "0" + " " + str(volume.shape[3] * side_len) + " " + "0" +
+                " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+
+        f.write("v " + " " + "0" + " " + "0" + " " + str(volume.shape[4] * side_len) +
+                " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+
+        f.write("v " + " " + str(volume.shape[2] * side_len) + " " + "0" + " " + str(volume.shape[4] * side_len) +
+                " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+
+        f.write("v " + " " + str(volume.shape[2] * side_len) + " " + str(volume.shape[3] * side_len) + " " + str(
+            volume.shape[4] * side_len) +
+                " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+
+        f.write("v " + " " + "0" + " " + str(volume.shape[3] * side_len) + " " + str(volume.shape[4] * side_len) +
+                " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+
 
 class FilePermutation(object):
     """
@@ -449,15 +465,17 @@ class FilePermutation(object):
         # TODO: fix permutation
 
         # custom permutation that only considers files that are in the directory
-        import os 
-        file_names = os.listdir("/visinf/home/vilab16/3D_baggage_segmentation/Smiths_LKA_Weapons_Down/len_8/") # '/fastdata/Smiths_LKA_WeaponsDown/len_8/'
+        import os
+        file_names = os.listdir(
+            "/visinf/home/vilab16/3D_baggage_segmentation/Smiths_LKA_Weapons_Down/len_8/")  # '/fastdata/Smiths_LKA_WeaponsDown/len_8/'
         ending = '_label.npy'
         permutation = []
         for file_name in file_names:
             if ending in file_name:
                 permutation.append(file_name[:-len(ending)])
-    
+
         self.permute = permutation
+
     def __getitem__(self, index: int):
         """
         Returns the permuteded index
