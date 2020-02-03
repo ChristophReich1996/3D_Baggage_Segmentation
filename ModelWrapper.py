@@ -82,6 +82,7 @@ class OccupancyNetworkWrapper(object):
             if save_best_model and (best_loss > average_loss):
                 torch.save(self.occupancy_network,
                            model_save_path + 'occupancy_network_' + self.device + '.pt')
+        progress_bar.close()
 
     def test(self, draw: bool = True, side_len: int = 1, model_load_path: str = '') -> (np.ndarray, np.ndarray, np.ndarray):
         """
@@ -139,6 +140,7 @@ class OccupancyNetworkWrapper(object):
 
         loss, precision, recall = np.mean(np.array(losses_test_batch)), np.mean(np.array(precision_test_batch)), np.mean(np.array(recall_test_batch)) 
 
+        print(f'Memory allocated: {torch.cuda.memory_allocated(device=torch.cuda.current_device())} Max memory allocated: {torch.cuda.max_memory_allocated(device=torch.cuda.current_device())}')
         print(f'losses_test_batch: {loss}, precision_test_batch: {precision}, recall_test_batch: {recall}')
 
         return loss, precision, recall

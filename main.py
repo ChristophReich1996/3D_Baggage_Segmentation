@@ -13,11 +13,12 @@ import Misc
 
 if __name__ == '__main__':
     # Batch size has to be a factor of the number of devices used in data parallel
-    os.environ["CUDA_VISIBLE_DEVICES"] = '3' # "1, 3, 4, 5, 6"
+    
+    os.environ["CUDA_VISIBLE_DEVICES"] = "0" # , 1, 3, 5, 4"
     # model = Models.OccupancyNetwork()
     # model = torch.nn.DataParallel(model)
     # ModelWrapper.OccupancyNetworkWrapper(occupancy_network=model,
-    #                                      occupancy_network_optimizer=torch.optim.Adam(model.parameters(), lr=1e-05),
+    #                                      occupancy_network_optimizer=torch.optim.Adam(model.parameters(), lr=1e-03),
     #                                      training_data=DataLoader(Datasets.WeaponDataset(
     #                                          target_path_volume= '/visinf/home/vilab16/3D_baggage_segmentation/Smiths_LKA_Weapons_Down/len_8/', # "/fastdata/Smiths_LKA_Weapons_Down/len_8/",
     #                                          target_path_label= '/visinf/home/vilab16/3D_baggage_segmentation/Smiths_LKA_Weapons_Down/len_1/', # "/fastdata/Smiths_LKA_Weapons/len_1/",
@@ -29,7 +30,7 @@ if __name__ == '__main__':
     #                                      validation_data=None,
     #                                      test_data=None,
     #                                      loss_function=BCELoss(reduction='mean')
-    #                                      ).train(epochs=10000, model_save_path='/visinf/home/vilab16/3D_baggage_segmentation/')
+    #                                      ).train(epochs=100, model_save_path='/visinf/home/vilab16/3D_baggage_segmentation/')
 
     model = torch.load('/visinf/home/vilab16/3D_baggage_segmentation/' + 'occupancy_network_cuda.pt').module
     ModelWrapper.OccupancyNetworkWrapper(occupancy_network=model,
