@@ -14,7 +14,7 @@ import Misc
 if __name__ == '__main__':
     # Batch size has to be a factor of the number of devices used in data parallel
 
-    os.environ["CUDA_VISIBLE_DEVICES"] = '1'  # , 1, 3, 5, 4"
+    os.environ["CUDA_VISIBLE_DEVICES"] = '0'  # , 1, 3, 5, 4"
     # model = Models.OccupancyNetwork()
     # model = torch.nn.DataParallel(model)
     # ModelWrapper.OccupancyNetworkWrapper(occupancy_network=model,
@@ -40,7 +40,7 @@ if __name__ == '__main__':
                                          test_data=DataLoader(Datasets.WeaponDataset(
                                              target_path_volume='/fastdata/Smiths_LKA_Weapons_Down/len_8/',
                                              target_path_label='/fastdata/Smiths_LKA_Weapons_Down/len_1/',
-                                             npoints=2 ** 16,
+                                             npoints=2 ** 17,
                                              side_len=8,
                                              length=200,
                                              offset=2600,

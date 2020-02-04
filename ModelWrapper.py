@@ -94,29 +94,17 @@ class OccupancyNetworkWrapper(object):
             for idx, batch in enumerate(self.test_data):
                 # Update progress bar
                 progress_bar.update(1)
-                # Model into evalf mode
+                # Model into eval mode
                 self.occupancy_network.eval()
                 # Get batch data
                 volume, coordinates, labels, actual = batch
                 # Data to device
                 volume = volume.to(self.device)
-                coords = coords.to(self.device)
+                coordinates = coordinates.to(self.device)
                 labels = labels.to(self.device)
                 actual = actual.to(self.device)
                 # Make prediction
-                prediction = self.occupancy_network(volume.to(self.device), coords.to(self.device))
-                # Calc intersection over union
-                iou = Misc.intersection_over_union(prediction, coordinates, actual, threshold=threshold)
-                self.logging('iou', iou.item())
-                # Calc precision
-                precision = Misc.precision(prediction, coordinates, actual, threshold=threshold)
-                self.logging('precision', precision.item())
-                # Calc recall
-                recall = Misc.recall(prediction, coordinates, actual, threshold=threshold)
-                self.logging('recall', recall.item())
-                # Calc loss
-                loss = self.loss_function(prediction, labels)
-                self.logging('test loss', loss.item())
+                prediction = self.occupancy_network(volume, coordinates)
                 # Set offset
                 prediction_offset = (prediction > threshold).float()
                 # Reshape prediction offset tensor by removing dimension
@@ -124,10 +112,22 @@ class OccupancyNetworkWrapper(object):
                 # Calc coordinates predicted as a weapon
                 weapon_prediction = coordinates[prediction_offset == 1.0]
                 # Reshape actual tensor
-                actual = actual.reshape(-1, 3)
+                actual_ = actual.reshape(-1, 3)
                 # Draw weapon prediction
                 if draw:
-                    Misc.draw_test(weapon_prediction, actual, volume, side_len, idx)
+                    Misc.draw_test(weapon_prediction, actual_, volume, side_len, idx)
+                # Calc intersection over union
+                iou = Misc.intersection_over_union(prediction, coordinates, actual[0], threshold=threshold)
+                self.logging('iou', iou.item())
+                # Calc precision
+                precision = Misc.precision(prediction, coordinates, actual[0], threshold=threshold)
+                self.logging('precision', precision.item())
+                # Calc recall
+                recall = Misc.recall(prediction, coordinates, actual[0], threshold=threshold)
+                self.logging('recall', recall.item())
+                # Calc loss
+                loss = self.loss_function(prediction, labels)
+                self.logging('test loss', loss.item())
             # Close progress bar
             progress_bar.close()
         # Get average metrics
