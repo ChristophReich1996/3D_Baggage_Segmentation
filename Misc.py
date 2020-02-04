@@ -20,6 +20,13 @@ def intersection_over_union(prediction: torch.tensor, label: torch.tensor, thres
     iou = intersection / (union + 1e-9)
     return iou
 
+def get_tensor_size_mb(tensor: torch.tensor):
+    """
+    Method that calculates the megabyte needed for a tensor to be stored. Takes into account if tensor is on CPU or GPU.
+    :param tensor: (torch.tensor) Input tensor
+    :return: (int) Tensor size in megabyte
+    """
+    return tensor.nelement() * tensor.element_size() // 1e+6
 
 def get_activation(activation: str) -> nn.Sequential:
     """
@@ -507,7 +514,7 @@ class FilePermutation(object):
         # custom permutation that only considers files that are in the directory
         import os
         file_names = os.listdir(
-            "/visinf/home/vilab16/3D_baggage_segmentation/Smiths_LKA_Weapons_Down/len_8/")  # '/fastdata/Smiths_LKA_WeaponsDown/len_8/'
+            "/fastdata/Smiths_LKA_Weapons_Down/len_8/")  # '/fastdata/Smiths_LKA_WeaponsDown/len_8/'
         ending = '_label.npy'
         permutation = []
         for file_name in file_names:
