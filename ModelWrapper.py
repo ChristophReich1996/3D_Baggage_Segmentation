@@ -88,6 +88,8 @@ class OccupancyNetworkWrapper(object):
     def test(self, draw: bool = True, side_len: int = 1, threshold: float = 0.5) -> Tuple[float, float, float, float]:
         # Init progress bar
         progress_bar = tqdm(total=len(self.test_data))
+        # Get downsampling factor for input and calculate usampling factor
+        upsample_factor = self.test_data.dataset.side_len ** 3
         # Calc no grads
         with torch.no_grad():
             # Iterate over test dataset
@@ -128,6 +130,15 @@ class OccupancyNetworkWrapper(object):
                 # Calc loss
                 loss = self.loss_function(prediction, labels)
                 self.logging('test loss', loss.item())
+                # Get memory consumption of tensors (upsample volume to original)
+                size_volume = Misc.get_tensor_size_mb(volume) * upsample_factor
+                size_prediction = Misc.get_tensor_size_mb(prediction)
+                size_actual = Misc.get_tensor_size_mb(actual)
+                # TODO: replace with bounding box tensor
+                self.logging('size_volume', size_volume)
+                self.logging('size_prediction', size_prediction)
+                self.logging('size_actual', size_actual)
+
             # Close progress bar
             progress_bar.close()
         # Get average metrics
@@ -135,15 +146,15 @@ class OccupancyNetworkWrapper(object):
         test_precision = self.get_average_metric('precision')
         test_recall = self.get_average_metric('recall')
         test_loss = self.get_average_metric('test loss')
+        test_size_volume = self.get_average_metric('size_volume')
+        test_size_prediction = self.get_average_metric('size_prediction')
+        test_size_actual = self.get_average_metric('size_actual')
         # Print metrics
         print('Intersection over union = {}'.format(test_iou))
         print('Precision = {}'.format(test_precision))
         print('Recall = {}'.format(test_recall))
         print('Test loss = {}'.format(test_loss))
-        # Print memory usage
-        print('Memory allocated: {} Max memory allocated: {}'.format(
-            torch.cuda.memory_allocated(device=torch.cuda.current_device()),
-            torch.cuda.max_memory_allocated(device=torch.cuda.current_device())))
+        print('Average memory usage per sample: Original volume = {}MB, Label = {}MB, Prediction = {}MB'.format(test_size_volume, test_size_actual, test_size_prediction))
         return test_iou, test_precision, test_recall, test_loss
 
     def logging(self, metric_name: str, value: float) -> None:
