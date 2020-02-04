@@ -154,7 +154,7 @@ class OccupancyNetworkWrapper(object):
         print('Precision = {}'.format(test_precision))
         print('Recall = {}'.format(test_recall))
         print('Test loss = {}'.format(test_loss))
-        print('Average memory usage per sample: Original volume = {}MB, Label = {}MB, Prediction = {}MB'.format(test_size_volume, test_size_actual, test_size_prediction))
+        print('Average memory usage per sample: Original volume = {}MB, Label = {}MB, Prediction = {}MB'.format(round(test_size_volume,2), round(test_size_actual,2), round(test_size_prediction,2)))
         return test_iou, test_precision, test_recall, test_loss
 
     def logging(self, metric_name: str, value: float) -> None:

@@ -29,19 +29,13 @@ def intersection_over_union(prediction: torch.tensor, coordinates: torch.tensor,
     iou = intersection / (union + 1e-9)
     return iou
 
-def get_tensor_size_mb(tensor: torch.tensor, rounding:bool = True, n_decimals: int = 2):
+def get_tensor_size_mb(tensor: torch.tensor):
     """
     Method that calculates the megabyte needed for a tensor to be stored. Takes into account if tensor is on CPU or GPU.
     :param tensor: (torch.tensor) Input tensor
-    :param rounding: (bool) Round output
-    :param n_decimals: (int) Round to n decimals
     :return: (int) Tensor size in megabyte
     """
-    size_mb = tensor.nelement() * tensor.element_size() * 1e-6
-    if rounding:
-        return round(size_mb, n_decimals)
-    else:
-        return size_mb                                         
+    return tensor.nelement() * tensor.element_size() * 1e-6                                        
 
 def precision(prediction: torch.tensor, coordinates: torch.tensor, label: torch.tensor,
               threshold: float = 0.5) -> torch.tensor:
