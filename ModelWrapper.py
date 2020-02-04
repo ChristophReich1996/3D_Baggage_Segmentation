@@ -1,4 +1,4 @@
-from typing import Callable, Dict, List
+from typing import Callable, Dict, List, Tuple
 
 import numpy as np
 import torch
@@ -8,7 +8,8 @@ from torch.utils.data.dataloader import DataLoader
 from datetime import datetime
 from pykdtree.kdtree import KDTree
 from torchsummary import summary
-from Misc import draw_test
+import Misc
+
 
 class OccupancyNetworkWrapper(object):
     """
@@ -84,66 +85,66 @@ class OccupancyNetworkWrapper(object):
                            model_save_path + 'occupancy_network_' + self.device + '.pt')
         progress_bar.close()
 
-    def test(self, draw: bool = True, side_len: int = 1, model_load_path: str = '') -> (np.ndarray, np.ndarray, np.ndarray):
-        """
-        Testing method
-        :param draw: (bool) If True draw output volume to file
-        :param side_len: (int) Downsampling factor of output file
-        :param model_load_path: (str) Stored model location
-        :return: (np.ndarray, np.ndarray, np.ndarray) Losses, Precision, Recall
-        """
-        
-        # checkpoint = torch.load(model_load_path + 'occupancy_network_' + self.device + '.pt', map_location=lambda storage, loc: storage)
-        # self.occupancy_network.load_state_dict(checkpoint)
-        # del checkpoint  # dereference seems crucial
-        # torch.cuda.empty_cache()
-
+    def test(self, draw: bool = True, side_len: int = 1, threshold: float = 0.5) -> Tuple[float, float, float, float]:
+        # Init progress bar
+        progress_bar = tqdm(total=len(self.test_data))
+        # Calc no grads
         with torch.no_grad():
-            losses_test_batch = []
-            precision_test_batch = []
-            recall_test_batch = []
+            # Iterate over test dataset
             for idx, batch in enumerate(self.test_data):
+                # Update progress bar
+                progress_bar.update(1)
+                # Model into evalf mode
                 self.occupancy_network.eval()
-                # Makes predictions
-                volume, coords, labels, actual = batch
-
-                # print(volume.shape, coords.shape, labels.shape, actual.shape)
-                yhat = self.occupancy_network(volume.to(self.device), coords.to(self.device))
-                yhat = (yhat > 0.5).float()
-                hits = torch.squeeze(yhat)
-                locs = coords[hits == 1]
-                
-                actual = actual.reshape(-1,3)
-
+                # Get batch data
+                volume, coordinates, labels, actual = batch
+                # Data to device
+                volume = volume.to(self.device)
+                coords = coords.to(self.device)
+                labels = labels.to(self.device)
+                actual = actual.to(self.device)
+                # Make prediction
+                prediction = self.occupancy_network(volume.to(self.device), coords.to(self.device))
+                # Calc intersection over union
+                iou = Misc.intersection_over_union(prediction, coordinates, actual, threshold=threshold)
+                self.logging('iou', iou.item())
+                # Calc precision
+                precision = Misc.precision(prediction, coordinates, actual, threshold=threshold)
+                self.logging('precision', precision.item())
+                # Calc recall
+                recall = Misc.recall(prediction, coordinates, actual, threshold=threshold)
+                self.logging('recall', recall.item())
+                # Calc loss
+                loss = self.loss_function(prediction, labels)
+                self.logging('test loss', loss.item())
+                # Set offset
+                prediction_offset = (prediction > threshold).float()
+                # Reshape prediction offset tensor by removing dimension
+                prediction_offset = torch.squeeze(prediction_offset)
+                # Calc coordinates predicted as a weapon
+                weapon_prediction = coordinates[prediction_offset == 1.0]
+                # Reshape actual tensor
+                actual = actual.reshape(-1, 3)
+                # Draw weapon prediction
                 if draw:
-                    draw_test(locs, actual, volume, side_len, idx)
-
-                kd_tree = KDTree(actual.cpu().numpy(), leafsize=16)
-                dist, _ = kd_tree.query(locs.cpu().numpy(), k=1)
-                union = np.sum(dist == 0)
-                
-                if union != 0:
-                    precision = union/locs.shape[0]
-                    recall = union/actual.shape[0]
-
-                    loss_test_batch = self.loss_function(yhat, labels.to(self.device)).item()
-                    losses_test_batch.append(loss_test_batch)
-                    precision_test_batch.append(precision)
-                    recall_test_batch.append(recall)
-                else:
-                    continue
-
-                # loss_test_batch = self.loss_function(yhat, labels.to(self.device)).item()
-                # losses_test_batch.append(loss_test_batch)
-                # precision_test_batch.append(precision)
-                # recall_test_batch.append(recall)
-
-        loss, precision, recall = np.mean(np.array(losses_test_batch)), np.mean(np.array(precision_test_batch)), np.mean(np.array(recall_test_batch)) 
-
-        print(f'Memory allocated: {torch.cuda.memory_allocated(device=torch.cuda.current_device())} Max memory allocated: {torch.cuda.max_memory_allocated(device=torch.cuda.current_device())}')
-        print(f'losses_test_batch: {loss}, precision_test_batch: {precision}, recall_test_batch: {recall}')
-
-        return loss, precision, recall
+                    Misc.draw_test(weapon_prediction, actual, volume, side_len, idx)
+            # Close progress bar
+            progress_bar.close()
+        # Get average metrics
+        test_iou = self.get_average_metric('iou')
+        test_precision = self.get_average_metric('precision')
+        test_recall = self.get_average_metric('recall')
+        test_loss = self.get_average_metric('test loss')
+        # Print metrics
+        print('Intersection over union = {}'.format(test_iou))
+        print('Precision = {}'.format(test_precision))
+        print('Recall = {}'.format(test_recall))
+        print('Test loss = {}'.format(test_loss))
+        # Print memory usage
+        print('Memory allocated: {} Max memory allocated: {}'.format(
+            torch.cuda.memory_allocated(device=torch.cuda.current_device()),
+            torch.cuda.max_memory_allocated(device=torch.cuda.current_device())))
+        return test_iou, test_precision, test_recall, test_loss
 
     def logging(self, metric_name: str, value: float) -> None:
         """
@@ -168,7 +169,19 @@ class OccupancyNetworkWrapper(object):
         epochs = np.array(self.metrics['epoch'])
         # Calc mean
         metric_average = np.mean(metric[np.argwhere(epochs == epoch)])
-        return metric_average
+        return float(metric_average)
+
+    def get_average_metric(self, metric_name: str) -> float:
+        """
+        Method calculates the average of a metric
+        :param metric_name: (str) Name of the metric
+        :return: (float) Average metric
+        """
+        # Convert lists to np.array
+        metric = np.array(self.metrics[metric_name])
+        # Calc mean
+        metric_average = np.mean(metric)
+        return float(metric_average)
 
     @staticmethod
     def save_metrics(metrics: Dict[str, List[float]], path: str, add_time_to_file_name: bool = False) -> None:

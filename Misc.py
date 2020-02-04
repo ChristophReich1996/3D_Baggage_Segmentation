@@ -3,22 +3,76 @@ from typing import List, Union, Tuple
 import torch
 import torch.nn as nn
 import numpy as np
+import os
+from pykdtree.kdtree import KDTree
 
 
-def intersection_over_union(prediction: torch.tensor, label: torch.tensor, threshold: float = 0.5) -> torch.tensor:
-    # Check sizes
-    assert prediction.numel() == label.numel(), 'Number of elements in prediction and label must match'
-    # Reshape tensors
+def intersection_over_union(prediction: torch.tensor, coordinates: torch.tensor, label: torch.tensor,
+                            threshold: float = 0.5) -> torch.tensor:
+    # Init kd tree
+    kd_tree = KDTree(label.cpu().numpy(), leafsize=16)
+    # Estimate which coordinates are weapons
+    dist_coordinates_to_label, _ = kd_tree.query(coordinates.cpu().numpy(), k=1)
+    del _  # Help the python garbage collector
+    dist_coordinates_to_label = torch.from_numpy(dist_coordinates_to_label).to(prediction.device)
+    # Estimate which coordinates belongs to a weapon
+    coordinates_label = (dist_coordinates_to_label == 1.0).float()  # 1 if weapon 0 if not
+    # Reshape prediction to one dimension
     prediction = prediction.view(-1)
-    label = label.view(-1)
     # Apply threshold
     prediction = (prediction > threshold).float()
-    # Calc intersect
-    intersection = torch.sum(((prediction + label) == 2).float())
-    union = torch.sum(((prediction + label) >= 1).float())
+    # Calc intersect and union
+    sum_of_prediction_and_coordinates_label = prediction + coordinates_label
+    intersection = torch.sum((sum_of_prediction_and_coordinates_label == 2).float())
+    union = torch.sum((sum_of_prediction_and_coordinates_label >= 1).float())
     # Calc iou
     iou = intersection / (union + 1e-9)
     return iou
+
+
+def precision(prediction: torch.tensor, coordinates: torch.tensor, label: torch.tensor,
+              threshold: float = 0.5) -> torch.tensor:
+    # Init kd tree
+    kd_tree = KDTree(label.cpu().numpy(), leafsize=16)
+    # Estimate which coordinates are weapons
+    dist_coordinates_to_label, _ = kd_tree.query(coordinates.cpu().numpy(), k=1)
+    del _  # Help the python garbage collector
+    dist_coordinates_to_label = torch.from_numpy(dist_coordinates_to_label).to(prediction.device)
+    # Estimate which coordinates belongs to a weapon
+    coordinates_label = (dist_coordinates_to_label == 1.0).float()  # 1 if weapon 0 if not
+    # Reshape prediction to one dimension
+    prediction = prediction.view(-1)
+    # Apply threshold
+    prediction = (prediction > threshold).float()
+    # Calc true positives
+    tp = (((prediction == 1.0).float() + (coordinates_label == 1.0).float()) == 2.0).float()
+    # Calc False positives
+    fp = (((prediction == 1.0).float() + (coordinates_label == 0.0).float()) == 2.0).float()
+    # Calc precision
+    precision = torch.sum(tp) / (torch.sum(tp + fp) + 1e-9)
+    return precision
+
+def recall(prediction: torch.tensor, coordinates: torch.tensor, label: torch.tensor,
+           threshold: float = 0.5) -> torch.tensor:
+    # Init kd tree
+    kd_tree = KDTree(label.cpu().numpy(), leafsize=16)
+    # Estimate which coordinates are weapons
+    dist_coordinates_to_label, _ = kd_tree.query(coordinates.cpu().numpy(), k=1)
+    del _  # Help the python garbage collector
+    dist_coordinates_to_label = torch.from_numpy(dist_coordinates_to_label).to(prediction.device)
+    # Estimate which coordinates belongs to a weapon
+    coordinates_label = (dist_coordinates_to_label == 1.0).float()  # 1 if weapon 0 if not
+    # Reshape prediction to one dimension
+    prediction = prediction.view(-1)
+    # Apply threshold
+    prediction = (prediction > threshold).float()
+    # Calc true positives
+    tp = (((prediction == 1.0).float() + (coordinates_label == 1.0).float()) == 2.0).float()
+    # Calc False negatives
+    fn = (((prediction == 0.0).float() + (coordinates_label == 1.0).float()) == 2.0).float()
+    # Calc precision
+    precision = torch.sum(tp) / (torch.sum(tp + fn) + 1e-9)
+    return precision
 
 
 def get_activation(activation: str) -> nn.Sequential:
@@ -143,14 +197,18 @@ def many_to_one_collate_fn_sample_down(batch):
 
     return volumes, coords, labels, low_volumes
 
-def draw_test(locs, actual, volume, side_len: int, batch_index: int, draw_out_path: str = 'obj/'):
-    
+
+def draw_test(locs, actual, volume, side_len: int, batch_index: int, draw_out_path: str = 'obj'):
+    draw_out_path = os.path.join(os.getcwd(), draw_out_path)
+    if not os.path.exists(draw_out_path):
+        os.mkdir(draw_out_path)
+
     if batch_index % 25 != 0:
         return
-  
+
     to_write = locs.cpu().numpy().astype(np.short)
     # Only each 10th as meshlab crashes otherwise
-    to_write_act = actual[::10,:].cpu().numpy().astype(np.short) #actual[::10,:]
+    to_write_act = actual[::10, :].cpu().numpy().astype(np.short)  # actual[::10,:]
     # Mean (shape) centering
     mean = np.array([volume.shape[2] * side_len / 2, volume.shape[3] * side_len / 2, volume.shape[4] * side_len / 2])
     to_write_act = to_write_act - mean
@@ -158,40 +216,41 @@ def draw_test(locs, actual, volume, side_len: int, batch_index: int, draw_out_pa
 
     # print(locs.shape, to_write.shape, actual.shape, to_write_act.shape)
 
-    with open(draw_out_path + str(batch_index) + '_outfile_pred.obj','w') as f:
+    with open(os.path.join(draw_out_path, str(batch_index) + '_outfile_pred.obj'), 'w') as f:
         for line in to_write:
-            f.write("v " + " " + str(line[0]) + " " + str(line[1]) + " " + str(line[2]) + 
-                " " + "0.5" + " " + "0.5" + " " + "1.0" + "\n")
+            f.write("v " + " " + str(line[0]) + " " + str(line[1]) + " " + str(line[2]) +
+                    " " + "0.5" + " " + "0.5" + " " + "1.0" + "\n")
         # for line in to_write_act:
         #     f.write("v " + " " + str(line[0]) + " " + str(line[1]) + " " + str(line[2]) + 
         #     " " + "0.19" + " " + "0.8" + " " + "0.19" + "\n")
 
-        #Corners of volume
-        f.write("v " + " " + "0"+ " " + "0" + " " + "0" + 
-            " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+        # Corners of volume
+        f.write("v " + " " + "0" + " " + "0" + " " + "0" +
+                " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
 
-        f.write("v " + " " + str(volume.shape[2] * side_len)+  " " + "0" + " " + "0" + 
-            " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
-        
-        f.write("v " + " " + str(volume.shape[2] * side_len) +  " " + str(volume.shape[3] * side_len) + " " + "0" + 
-            " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
-    
-        f.write("v " + " " + "0" +  " " + str(volume.shape[3] * side_len) + " " + "0" + 
-            " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+        f.write("v " + " " + str(volume.shape[2] * side_len) + " " + "0" + " " + "0" +
+                " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
 
-        f.write("v " + " " + "0"+ " " + "0" + " " + str(volume.shape[4] * side_len) + 
-            " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+        f.write("v " + " " + str(volume.shape[2] * side_len) + " " + str(volume.shape[3] * side_len) + " " + "0" +
+                " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
 
-        f.write("v " + " " + str(volume.shape[2] * side_len)+  " " + "0" + " " + str(volume.shape[4] * side_len) + 
-            " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
-        
-        f.write("v " + " " + str(volume.shape[2] * side_len) +  " " + str(volume.shape[3] * side_len) + " " + str(volume.shape[4] * side_len)+ 
-            " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
-    
-        f.write("v " + " " + "0" +  " " + str(volume.shape[3] * side_len) + " " + str(volume.shape[4] * side_len) + 
-            " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+        f.write("v " + " " + "0" + " " + str(volume.shape[3] * side_len) + " " + "0" +
+                " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
 
-    with open(draw_out_path + str(batch_index) + '_outfile_label.obj','w') as f:
+        f.write("v " + " " + "0" + " " + "0" + " " + str(volume.shape[4] * side_len) +
+                " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+
+        f.write("v " + " " + str(volume.shape[2] * side_len) + " " + "0" + " " + str(volume.shape[4] * side_len) +
+                " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+
+        f.write("v " + " " + str(volume.shape[2] * side_len) + " " + str(volume.shape[3] * side_len) + " " + str(
+            volume.shape[4] * side_len) +
+                " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+
+        f.write("v " + " " + "0" + " " + str(volume.shape[3] * side_len) + " " + str(volume.shape[4] * side_len) +
+                " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
+
+    with open(os.path.join(draw_out_path, str(batch_index) + '_outfile_label.obj'), 'w') as f:
         # for line in to_write:
         #     f.write("v " + " " + str(line[0]) + " " + str(line[1]) + " " + str(line[2]) + 
         #         " " + "0.5" + " " + "0.5" + " " + "1.0" + "\n")
@@ -507,7 +566,7 @@ class FilePermutation(object):
         # custom permutation that only considers files that are in the directory
         import os
         file_names = os.listdir(
-            "/visinf/home/vilab16/3D_baggage_segmentation/Smiths_LKA_Weapons_Down/len_8/")  # '/fastdata/Smiths_LKA_WeaponsDown/len_8/'
+            "/fastdata/Smiths_LKA_Weapons_Down/len_8/")  # '/fastdata/Smiths_LKA_WeaponsDown/len_8/'
         ending = '_label.npy'
         permutation = []
         for file_name in file_names:
