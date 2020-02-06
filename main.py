@@ -14,7 +14,7 @@ import Misc
 if __name__ == '__main__':
     # Batch size has to be a factor of the number of devices used in data parallel
 
-    os.environ["CUDA_VISIBLE_DEVICES"] = '0'  # , 1, 3, 5, 4"
+    os.environ["CUDA_VISIBLE_DEVICES"] = '1'  # , 1, 3, 5, 4"
     # model = Models.OccupancyNetwork()
     # model = torch.nn.DataParallel(model)
     # ModelWrapper.OccupancyNetworkWrapper(occupancy_network=model,

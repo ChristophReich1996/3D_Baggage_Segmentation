@@ -119,6 +119,13 @@ class OccupancyNetworkWrapper(object):
                 # Calc intersection over union
                 iou = Misc.intersection_over_union(prediction, coordinates, actual[0], threshold=threshold)
                 self.logging('iou', iou.item())
+                # Calc intersection over union for bounding box
+                iou_bounding_box, bounding_box_prediction_shape = \
+                    Misc.intersection_over_union_bounding_box(prediction, coordinates, actual[0], threshold=threshold)
+                self.logging('iou_bounding_box', iou_bounding_box.item())
+                self.logging('bounding_box_shape_x', bounding_box_prediction_shape[0].item())
+                self.logging('bounding_box_shape_y', bounding_box_prediction_shape[1].item())
+                self.logging('bounding_box_shape_z', bounding_box_prediction_shape[2].item())
                 # Calc precision
                 precision = Misc.precision(prediction, coordinates, actual[0], threshold=threshold)
                 self.logging('precision', precision.item())
@@ -132,11 +139,18 @@ class OccupancyNetworkWrapper(object):
             progress_bar.close()
         # Get average metrics
         test_iou = self.get_average_metric('iou')
+        test_iou_bounding_box = self.get_average_metric('iou_bounding_box')
+        test_bounding_box_shape_x = self.get_average_metric('bounding_box_shape_x')
+        test_bounding_box_shape_y = self.get_average_metric('bounding_box_shape_y')
+        test_bounding_box_shape_z = self.get_average_metric('bounding_box_shape_z')
         test_precision = self.get_average_metric('precision')
         test_recall = self.get_average_metric('recall')
         test_loss = self.get_average_metric('test loss')
         # Print metrics
         print('Intersection over union = {}'.format(test_iou))
+        print('Intersection over union bounding box = {}'.format(test_iou_bounding_box))
+        print('Mean bounding box shape = {}, {}, {}'.format(test_bounding_box_shape_x, test_bounding_box_shape_y,
+                                                            test_bounding_box_shape_z))
         print('Precision = {}'.format(test_precision))
         print('Recall = {}'.format(test_recall))
         print('Test loss = {}'.format(test_loss))
@@ -153,7 +167,10 @@ class OccupancyNetworkWrapper(object):
         :param value: (float) Value of the metric
         """
         if metric_name in self.metrics:
-            self.metrics[metric_name].append(value)
+            if value is None:
+                return
+            else:
+                self.metrics[metric_name].append(value)
         else:
             self.metrics[metric_name] = [value]
 

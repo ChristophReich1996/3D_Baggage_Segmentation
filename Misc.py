@@ -8,7 +8,8 @@ from pykdtree.kdtree import KDTree
 
 
 def intersection_over_union_bounding_box(prediction: torch.tensor, coordinates: torch.tensor, label: torch.tensor,
-                                         threshold: float = 0.5) -> torch.tensor:
+                                         threshold: float = 0.5,
+                                         offset: torch.tensor = torch.tensor([10.0, 10.0, 10.0])) -> torch.tensor:
     # Init kd tree
     kd_tree = KDTree(label.cpu().numpy(), leafsize=16)
     # Estimate which coordinates are weapons
@@ -16,28 +17,37 @@ def intersection_over_union_bounding_box(prediction: torch.tensor, coordinates: 
     del _  # Help the python garbage collector
     dist_coordinates_to_label = torch.from_numpy(dist_coordinates_to_label).to(prediction.device)
     # Estimate which coordinates belongs to a weapon
-    coordinates_label = (dist_coordinates_to_label == 1.0).float()  # 1 if weapon 0 if not
+    coordinates_label = coordinates[dist_coordinates_to_label == 1.0]  # 1 if weapon 0 if not
+    if coordinates.shape[0] == 0:
+        return torch.tensor([1]), torch.tensor([0, 0, 0])
     # Get max and min coordinates for bounding box
-    max_coordinates_label = torch.max(coordinates_label, dim=0)[0]  # Index 0 to get values
-    min_coordinates_label = torch.min(coordinates_label, dim=0)[0]  # Index 0 to get values
+    max_coordinates_label = torch.max(coordinates_label, dim=0)[0] + offset.to(coordinates_label.device) # Index 0 to get values
+    min_coordinates_label = torch.min(coordinates_label, dim=0)[0] - offset.to(coordinates_label.device) # Index 0 to get values
+    # print('\n', max_coordinates_label, min_coordinates_label)
     # Apply threshold
+    prediction = prediction.view(-1)
     prediction = (prediction > threshold).float()
+    if coordinates[prediction == 1.0].shape[0] == 0:
+        return torch.tensor([0]), torch.tensor([0, 0, 0])
     # Get max and min of prediction
     max_coordinates_prediction = torch.max(coordinates[prediction == 1.0], dim=0)[0]  # Index 0 to get values
     min_coordinates_prediction = torch.min(coordinates[prediction == 1.0], dim=0)[0]  # Index 0 to get values
+    # print('\n', max_coordinates_prediction, min_coordinates_prediction)
     # Calc volume of label bounding box
-    bounding_box_label_volume = torch.prod(torch.abs(max_coordinates_label - min_coordinates_label))
+    edge_sizes_label = torch.abs(max_coordinates_label - min_coordinates_label)
+    bounding_box_label_volume = torch.prod(edge_sizes_label)
     # Calc volume of prediction bounding box
-    bounding_box_label_label = torch.prod(torch.abs(max_coordinates_prediction - min_coordinates_prediction))
+    edge_size_prediction = torch.abs(max_coordinates_prediction - min_coordinates_prediction)
+    bounding_box_prediction_volume = torch.prod(edge_size_prediction)
     # Calc coordinates of intersecting bounding box
-    overlap = torch.max(torch.zeros(max_coordinates_prediction.shape),
+    overlap = torch.max(torch.zeros(max_coordinates_prediction.shape).to(prediction.device),
                         torch.min(max_coordinates_prediction, max_coordinates_label) - torch.max(
                             min_coordinates_prediction, min_coordinates_label))
     # Calc intersection volume
     intersection = torch.prod(overlap)
     # Calc intersection over union by: intersection / (volume label + volume prediction - intersection)
-    iou = intersection / (bounding_box_label_label + bounding_box_label_volume - intersection)
-    return iou
+    iou = intersection / (bounding_box_prediction_volume + bounding_box_label_volume - intersection + + 1e-9)
+    return iou.cpu(), edge_size_prediction.cpu()
 
 
 def intersection_over_union(prediction: torch.tensor, coordinates: torch.tensor, label: torch.tensor,
