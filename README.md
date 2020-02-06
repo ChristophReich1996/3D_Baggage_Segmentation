@@ -48,6 +48,6 @@ test_pipeline_unet.py
         -cr focal # Loss function
         -a test   # Wether to test or draw     
         -n        # Name for loading and saving checkpoints
-
+```
 ## Results
 ![](https://i.imgur.com/WTbDI4A.jpg)
