@@ -10,7 +10,7 @@ import functools
 import random
 import gc
 
-from data_interface import sample, many_to_one_collate_fn_sample, many_to_one_collate_fn_sample_test
+from data_interface import sample, many_to_one_collate_fn_sample, many_to_one_collate_fn_sample_test, many_to_one_collate_fn_list
 import utils
 import layers
 from config import device
@@ -48,8 +48,7 @@ class Network_Generator():
         self.mse = nn.MSELoss(reduction='mean')
         self._collate_fn = collate_fn
 
-    # TODO: multiple iterations
-    def test(self, test_dataset, side_len, npoints, name, down_fact, side_len_down):
+    def test(self, test_dataset, side_len, npoints, name, down_fact, side_len_down, batch_size=8):
         """Test wrapped network
 
         Arguments:
@@ -64,8 +63,8 @@ class Network_Generator():
             Test loss and IOU
         """
         # Get test set
-        loader_test = DataLoader(dataset=test_dataset, batch_size=self._size_batch,
-                                 pin_memory=False, shuffle=True, collate_fn=self._collate_fn)
+        loader_test = DataLoader(dataset=test_dataset, batch_size=batch_size,
+                                 pin_memory=False, shuffle=True, collate_fn=many_to_one_collate_fn_list)
 
         # Restore network for testing
         checkpoint = torch.load("model/" + type(self._oj_model).__name__ + "_" + str(device) + name + ".pt",
@@ -76,8 +75,73 @@ class Network_Generator():
         del checkpoint  # dereference seems crucial
         torch.cuda.empty_cache()
         losses_test_batch = []
+        losses_iou_batch = []
         # Test with same settings as for training and additionally calculate IOU
-        return self._val(loader_test, losses_test_batch, npoints=npoints, side_len=side_len, down_fact=down_fact, side_len_down=side_len_down, iou=True)
+        with torch.no_grad():
+            for batch in loader_test:
+                self._oj_model.eval()
+                volume_in, label_in = batch
+                shapes = np.max(
+                    np.array([volume_in[i].shape for i in range(batch_size)]), axis=0)
+                intersection = torch.zeros((batch_size, 1))
+                union = torch.zeros((batch_size, 1))
+
+                # Consider any extractable window of size side_len**3 to write total object
+                for vol_x in range(0, shapes[1], side_len):
+                    for vol_y in range(0, shapes[2], side_len):
+                        for vol_z in range(0, shapes[3], side_len):
+                            # Get extracted window and downsampled extracted window, SEE sample in data_interface.py for further information
+                            print("x", vol_x, "y", vol_y, "z", vol_z)
+
+                            samples = []
+                            samples_id = []
+                            for i in range(batch_size):
+                                # Sample volume, to get original volume back,
+                                # as well as downsampled volume, coords, and corresponding labels
+                                if volume_in[i].shape[1] - vol_x <= 0 or \
+                                   volume_in[i].shape[2] - vol_y <= 0 or \
+                                   volume_in[i].shape[3] - vol_z <= 0:
+                                    continue
+
+                                samp = sample(np.expand_dims(volume_in[i], axis=0), label_in[i], npoints=npoints, side_len=side_len, test=False,
+                                              down_fact=down_fact, side_len_down=side_len_down, share_box=0.0,
+                                              position=(vol_x, vol_y, vol_z))
+
+                                if samp is None:
+                                    continue
+                                samples.append(samp)
+                                samples_id.append(i)
+                            if len(samples) == 0:
+                                continue
+
+                            # Put samples together to get a batch that can be given to network
+                            batch_in = many_to_one_collate_fn_sample(
+                                samples, down=True)
+                            volume, coords, labels, volume_down = batch_in
+
+                            self._oj_model.eval()
+                            # Eval network
+                            yhat = self._oj_model(volume.to(device), coords.to(
+                                device), volume_down.to(device))
+                            # Computes validation loss
+                            loss_val_batch = self._oj_loss(
+                                yhat, labels.to(device)).item()
+                            # If iou set, calcl IOU
+                            intersection_patch, union_patch = layers.IOU_parts(
+                                coords, yhat, labels, volume.shape[0])
+                            intersection[samples_id] += intersection_patch
+                            union[samples_id] += union_patch
+                            losses_test_batch.append(loss_val_batch)
+                            # Urgently needed due to incredibly bad garbage collection by python
+                            gc.collect()
+                            loss_iou_batch = torch.mean(intersection / union)
+                            print(loss_iou_batch, layers.IOU(
+                                coords, yhat, labels, volume.shape[0]))
+
+        loss_test = np.mean(losses_test_batch)
+        loss_iou = loss_iou_batch
+
+        return loss_test, loss_iou
 
     # TODO: ONLY WORKING WITH BATCH_SIZE == 1 CURRENTLY
     def draw(self, test_dataset, side_len, name="", down_fact=0, side_len_down=0):
@@ -386,7 +450,7 @@ class Network_Generator():
                                 " " + "0.0" + " " + "1.0" + " " + "0.0" + "\n")
     # Validate, ignore grads
 
-    def _val(self, loader_val, losses_val, npoints, side_len, down_fact, side_len_down, iou=False, num_iterations=1):
+    def _val(self, loader_val, losses_val, npoints, side_len, down_fact, side_len_down, iou=False, num_iterations=1, cache_vol=[], cache_labels=[]):
         """Validate wrapped network
 
         Arguments:
@@ -403,61 +467,66 @@ class Network_Generator():
         Returns:
             [float] -- Valdiation Loss
         """
+        timer = utils.Timer()
         with torch.no_grad():
             losses_val_batch = []
             losses_iou_batch = []
             # Cache vol and labels to process 8 at a time
-            cache_vol = []
-            cache_labels = []
-            for iteration in range(num_iterations):
+            if len(cache_vol) == 0:
+                t2 = utils.Timer()
                 for j, batch in enumerate(loader_val):
                     cache_vol.append(batch[0])
                     cache_labels.append(batch[1])
-
+                print(t2.stop())
+            for iteration in range(num_iterations):
+                for j in range(0, len(cache_vol), 8):
                     # After 8 volumes and labels are cache, validate
-                    if j % 8 == 7:
-                        samples = []
-                        for i in range(8):
+                    samples = []
+                    for i in range(8):
+                        if i+j > len(cache_vol):
+                            break
                             # Sample volume, to get original volume back,
                             # as well as downsampled volume, coords, and corresponding labels
-                            samp = sample(cache_vol[i], cache_labels[i], npoints=npoints, side_len=side_len, test=False,
-                                          down_fact=down_fact, side_len_down=side_len_down, share_box=0.0)
-                            if samp is None:
-                                continue
-                            samples.append(samp)
-                        # Put samples together to get a batch that can be given to network
-                        batch_in = many_to_one_collate_fn_sample(
-                            samples, down=True)
-                        volume, coords, labels, volume_down = batch_in
+                        ones = 0
+                        while(ones==0):
+                            samp = sample(cache_vol[i + j], cache_labels[i + j], npoints=npoints, side_len=side_len, test=False,
+                                      down_fact=down_fact, side_len_down=side_len_down, share_box=0.0)
+                            ones = torch.sum(samp[2]).item()
+                        if samp is None:
+                            continue
+                        samples.append(samp)
+                    # Put samples together to get a batch that can be given to network
+                    batch_in = many_to_one_collate_fn_sample(
+                        samples, down=True)
+                    volume, coords, labels, volume_down = batch_in
 
-                        self._oj_model.eval()
-                        # Eval network
-                        yhat = self._oj_model(volume.to(device), coords.to(
-                            device), volume_down.to(device))
-                        # Computes validation loss
-                        loss_val_batch = self._oj_loss(
-                            yhat, labels.to(device)).item()
-                        # If iou set, calcl IOU
-                        if iou:
-                            loss_iou_batch = layers.IOU(
-                                coords, yhat, labels, volume.shape[0])
-                            losses_iou_batch.append(loss_iou_batch)
-                        losses_val_batch.append(loss_val_batch)
-                        cache_vol = []
-                        cache_labels = []
-                        # Urgently needed due to incredibly bad garbage collection by python
-                        gc.collect()
+                    self._oj_model.eval()
+                    # Eval network
+                    yhat = self._oj_model(volume.to(device), coords.to(
+                        device), volume_down.to(device))
+                    # Computes validation loss
+                    loss_val_batch = self._oj_loss(
+                        yhat, labels.to(device)).item()
+                    # If iou set, calcl IOU
+                    if iou:
+                        loss_iou_batch = layers.IOU(
+                            coords, yhat, labels, volume.shape[0])
+                        losses_iou_batch.append(loss_iou_batch)
+                    losses_val_batch.append(loss_val_batch)
+                    # Urgently needed due to incredibly bad garbage collection by python
+                    gc.collect()
 
             loss_val = np.mean(losses_val_batch)
             loss_iou = np.mean(losses_iou_batch)
             losses_val.append((loss_val))
+            print(timer.stop())
             if iou:
                 return loss_val, loss_iou
             else:
                 return loss_val
 
     def train(self, train_dataset, val_dataset, side_len, npoints, name, load=False,
-              cache_size=1000, win_sampled_size=16, down_fact=0, side_len_down=0, cache_type='fifo'):
+              cache_size=500, win_sampled_size=16, down_fact=0, side_len_down=0, cache_type='fifo'):
         """Train wrapped network
 
         Arguments:
@@ -484,6 +553,8 @@ class Network_Generator():
                                   num_workers=8, pin_memory=True, shuffle=True, collate_fn=self._collate_fn)
         loader_val = DataLoader(dataset=val_dataset, batch_size=self._size_batch,
                                 num_workers=8, pin_memory=True, shuffle=True, collate_fn=self._collate_fn)
+        cache_vol_val = []
+        cache_labels_val = []
         # Load model and optimizer
         if load:
             self._oj_model.load_state_dict(torch.load(
@@ -589,8 +660,11 @@ class Network_Generator():
 
                 samples = []
                 for i in indices:
-                    samp = sample(cache_vol[i], cache_labels[i], npoints=npoints,
+                    ones = 0
+                    while(ones==0):
+                        samp = sample(cache_vol[i], cache_labels[i], npoints=npoints,
                                   side_len=side_len, test=False, down_fact=down_fact, side_len_down=side_len_down)
+                        ones = torch.sum(samp[2]).item()
                     if samp is None:
                         continue
                     samples.append(samp)
@@ -612,7 +686,8 @@ class Network_Generator():
 
                 if i_ % self._size_print_every == self._size_print_every-1:
                     loss_val, iou = self._val(loader_val, losses_val, npoints=npoints, side_len=side_len,
-                                              down_fact=down_fact, side_len_down=side_len_down, iou=True)
+                                              down_fact=down_fact, side_len_down=side_len_down, iou=True,
+                                              cache_vol=cache_vol_val, cache_labels=cache_labels_val)
                     print("Validation Loss", loss_val,
                           "IOU", iou, "Best IOU", loss_best)
                     if iou > loss_best:
@@ -658,34 +733,34 @@ class Res_Auto_3d_Model_Occu(nn.Module):
     def __init__(self):
         super(Res_Auto_3d_Model_Occu, self).__init__()
 
-        self.encode = nn.Sequential(layers.Res_Block_Down_3D(1, 128, 3, 1, nn.SELU(), False),
+        self.encode = nn.Sequential(layers.Res_Block_Down_3D(1, 32, 3, 1, nn.SELU(), True),
                                     layers.Res_Block_Down_3D(
-                                        128, 128, 3, 1, nn.SELU(), True),
+                                        32, 64, 3, 1, nn.SELU(), True),
                                     layers.Res_Block_Down_3D(
-                                        128, 64, 3, 1, nn.SELU(), False),
+                                        64, 64, 3, 1, nn.SELU(), False),
                                     layers.Res_Block_Down_3D(
-                                        64, 64, 3, 1, nn.SELU(), True),
-                                    layers.Res_Block_Down_3D(64, 16, 3, 1, nn.SELU(), True))
+                                        64, 64, 3, 1, nn.SELU(), False),
+                                    layers.Res_Block_Down_3D(64, 16, 3, 1, nn.SELU(), False))
 
-        self.encode_low = nn.Sequential(layers.Res_Block_Down_3D(1, 128, 3, 1, nn.SELU(), False),
+        self.encode_low = nn.Sequential(layers.Res_Block_Down_3D(1, 32, 3, 1, nn.SELU(), True),
                                         layers.Res_Block_Down_3D(
-                                            128, 128, 3, 1, nn.SELU(), True),
+                                            32, 64, 3, 1, nn.SELU(), True),
                                         layers.Res_Block_Down_3D(
-                                            128, 64, 3, 1, nn.SELU(), False),
+                                            64, 64, 3, 1, nn.SELU(), False),
                                         layers.Res_Block_Down_3D(
-                                            64, 64, 3, 1, nn.SELU(), True),
-                                        layers.Res_Block_Down_3D(64, 16, 3, 1, nn.SELU(), True))
+                                            64, 64, 3, 1, nn.SELU(), False),
+                                        layers.Res_Block_Down_3D(64, 16, 3, 1, nn.SELU(), False))
 
-        self.decode = nn.Sequential(layers.Res_Block_Up_Flat(2048 + 3, 512, nn.SELU()),
+        self.decode = nn.Sequential(layers.Res_Block_Up_Flat(2048 + 3, 512, nn.SELU()), # 6912
                                     layers.Res_Block_Up_Flat(
                                         512, 512, nn.SELU()),
-                                    layers.Res_Block_Up_Flat(
-                                        512, 512, nn.SELU()),
-                                    layers.Res_Block_Up_Flat(
-                                        512, 512, nn.SELU()),
-                                    layers.Res_Block_Up_Flat(
-                                        512, 256, nn.SELU()),
-                                    layers.Res_Block_Up_Flat(256, 1, nn.Sigmoid()))
+                                    # layers.Res_Block_Up_Flat(
+                                    #    512, 512, nn.SELU()),
+                                    # layers.Res_Block_Up_Flat(
+                                    #    512, 512, nn.SELU()),
+                                    # layers.Res_Block_Up_Flat(
+                                    #    512, 256, nn.SELU()),
+                                    layers.Res_Block_Up_Flat(512, 1, nn.Sigmoid()))
 
     def forward(self, volume, coords, volume_low):
         # Encode high res extracted window

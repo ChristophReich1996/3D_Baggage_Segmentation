@@ -1,7 +1,7 @@
 
 import torch.nn as nn
 import torch.optim as optim
-from networks_hilo import *
+from networks_hilo_unet import *
 from data_interface import WeaponDataset, many_to_one_collate_fn
 import argparse
 
@@ -16,9 +16,6 @@ parser.add_argument('-sld', '-side_len_down',
 # Downsampling factor
 parser.add_argument('-df', '-down_factor', required='True',
                     choices=['2', '4', '8', '16', '32'])
-# Number of points to sample
-parser.add_argument('-np', '-npoints', required='True',
-                    type=int, choices=range(14))
 # Learning rate
 parser.add_argument('-lr', '-learning_rate', required='True',
                     choices=['3', '4', '5', '6'])
@@ -32,7 +29,6 @@ parser.add_argument('-n', '-name', required='False', default='')
 args = parser.parse_args()
 
 side_len = int(args.sl)
-npoints = 2**int(args.np)
 lr = 1 * 10**(-float(args.lr))
 side_len_down = int(args.sld)
 down_fact = int(args.df)
@@ -45,12 +41,12 @@ if args.cr == 'bce':
 elif args.cr == 'mse':
     oj_loss = nn.MSELoss(reduction='mean')
 elif args.cr == 'focal':
-    oj_loss == layers.FocalLoss()
+    oj_loss = layers.FocalLoss()
 elif args.cr == 'dice':
-    oj_loss == layers.DiceLoss(win_sampled_size)
+    oj_loss = layers.DiceLoss(win_sampled_size)
 
 length = 1 if action == 'draw' else 200
-offset = 2791 if action == 'draw' else 2729
+offset = 2729 if action == 'draw' else 2729
 print("Load Dataset:", end=" ", flush=True)
 test_dataset = WeaponDataset(target_path="../../../../fastdata/Smiths_LKA_Weapons/len_1/",
                              length=length,
@@ -65,7 +61,7 @@ network = Network_Generator(rate_learn=lr,
                             size_print_every=2**8,
                             oj_loss=oj_loss,
                             optimizer=optim.Adam,
-                            oj_model=Res_Auto_3d_Model_Occu_Parallel().to(device),
+                            oj_model=Res_Auto_3d_Model_Unet_Parallel().to(device),
                             collate_fn=many_to_one_collate_fn)
 print("Completed", flush=True)
 print("", flush=True)
@@ -73,12 +69,15 @@ print("", flush=True)
 print("Testing", flush=True)
 
 if action == 'draw':
-    network.draw_fast(test_dataset, 1, name, down_fact=down_fact,
-                      side_len_down=side_len_down)
+    network.draw(test_dataset=test_dataset,
+                 side_len=side_len,
+                 name=name,
+                 down_fact=down_fact,
+                 side_len_down=side_len_down,
+                 batch_size=1)
 else:
     print(network.test(test_dataset=test_dataset,
                        side_len=side_len,
-                       npoints=npoints,
                        name=name,
                        down_fact=down_fact,
                        side_len_down=side_len_down,

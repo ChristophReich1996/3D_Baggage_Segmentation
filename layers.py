@@ -31,7 +31,8 @@ class Res_Block_Down_3D(nn.Module):
         self.layer_conv2 = nn.Conv3d(size_out_channels, size_out_channels, size_filter, size_stride, padding=(
             int(size_filter/2), int(size_filter/2), int(size_filter/2)))
         self.layer_norm2 = nn.BatchNorm3d(size_out_channels)
-
+        self.channel_conv = nn.Conv3d(
+            size_in_channels, size_out_channels, 1, 1)
         if self._pool_avg:
             # TODO: Automatic dimension caluclation
             self.layer_pool = nn.AvgPool3d((2, 2, 2), stride=2)
@@ -45,14 +46,55 @@ class Res_Block_Down_3D(nn.Module):
         out = self.layer_conv2(out)
         out = self.layer_norm2(out)
 
-        identity = F.pad(identity, (0, 0, 0, 0, 0, 0, 0, abs(
-            self._size_in_channels - self._size_out_channels)))
-
-        #out += identity
+        identity = self.channel_conv(identity)
+        out += identity
         out = self.fn_act(out)
 
         if self._pool_avg:
             out = self.layer_pool(out)
+        return out
+
+
+class Res_Block_Up_3D(nn.Module):
+    def __init__(self, size_in_channels, size_out_channels, size_filter, size_stride, fn_act):
+        super(Res_Block_Up_3D, self).__init__()
+
+        # Params +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+        self._size_in_channels = size_in_channels
+        self._size_out_channels = size_out_channels
+
+        # Nodes ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+        self.layer_conv1 = nn.Conv3d(size_in_channels, size_out_channels, size_filter, size_stride, padding=(
+            int(size_filter/2), int(size_filter/2), int(size_filter/2)))
+        self.layer_norm1 = nn.BatchNorm3d(size_out_channels)
+
+        self.fn_act = fn_act
+        self.fn_identity = nn.Identity()
+
+        self.layer_conv2 = nn.Conv3d(size_out_channels, size_out_channels, size_filter, size_stride, padding=(
+            int(size_filter/2), int(size_filter/2), int(size_filter/2)))
+        self.layer_norm2 = nn.BatchNorm3d(size_out_channels)
+
+        self.channel_conv = nn.Conv3d(
+            size_in_channels, size_out_channels, 1, 1)
+
+        self.layer_up = nn.ConvTranspose3d(
+            size_out_channels, size_out_channels, size_filter + 1, (2, 2, 2), padding=(1, 1, 1))
+
+    def forward(self, x):
+        identity = self.fn_identity(x)
+
+        out = self.layer_conv1(x)
+        out = self.layer_norm1(out)
+        out = self.fn_act(out)
+        out = self.layer_conv2(out)
+        out = self.layer_norm2(out)
+
+        identity = self.channel_conv(identity)
+        out += identity
+        out = self.layer_up(out)
+        out = self.fn_act(out)
         return out
 
 
@@ -127,6 +169,7 @@ class Res_Block_Up_1D(nn.Module):
 # Scores ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 class DiceLoss(nn.Module):
     def __init__(self, batch_size):
+        super(DiceLoss, self).__init__()
         self.batch_size = batch_size
 
     def forward(self, y_true, y_pred):
@@ -145,7 +188,7 @@ class DiceLoss(nn.Module):
 
 
 class FocalLoss(nn.Module):
-    # See Kaggle
+    # SEE KAGGLE
     def __init__(self, alpha=1, gamma=2, logits=False, reduce=True):
         super(FocalLoss, self).__init__()
         self.alpha = alpha
@@ -168,7 +211,7 @@ class FocalLoss(nn.Module):
             return F_loss
 
 
-def IOU(coords, yhat, labels, batch_size, threshold=0.7):
+def IOU(coords, yhat, labels, batch_size, threshold=0.01):
     coords = coords.reshape(batch_size, -1, 3)
     yhat = yhat.reshape(batch_size, -1, 1)
     labels = labels.reshape(batch_size, -1, 1)
@@ -185,7 +228,55 @@ def IOU(coords, yhat, labels, batch_size, threshold=0.7):
             iou_batch.append(
                 hits_sum / (yhat_i.shape[0] + labels_i.shape[0] - hits_sum))
         else:
-            iou_batch.append(
-                1 - (yhat_i.shape[0] / (yhat_i.shape[0] + coords[i].shape[0] - yhat_i.shape[0])))
+            pass
+            # iou_batch.append(0.0)
+            # 1 - (yhat_i.shape[0] / (yhat_i.shape[0] + coords[i].shape[0] - yhat_i.shape[0])))
 
     return np.mean(np.array(iou_batch))
+
+
+def IOU_unet_val(yhat, labels, batch_size, threshold=0.5):
+    yhat = torch.squeeze(yhat, dim=1)
+    labels = torch.squeeze(labels, dim=1)
+    #print("mean", torch.max(yhat), torch.mean(yhat))
+    yhat = (yhat >= threshold)
+    labels = (labels == 1)
+    intersection = (yhat & labels).float().sum((0, 1, 2, 3))
+    union = (yhat | labels).float().sum((0, 1, 2, 3))
+    iou = (intersection) / (union + 0.00001)
+    return torch.mean(iou)
+
+
+def IOU_unet_val_parts(yhat, labels, batch_size, threshold=0.6):
+    yhat = torch.squeeze(yhat, dim=1)
+    labels = torch.squeeze(labels, dim=1)
+    #print("mean", torch.max(yhat), torch.mean(yhat))
+    yhat = (yhat >= threshold)
+    labels = (labels == 1)
+
+    intersection = (yhat & labels).float().sum((1, 2, 3))
+    union = (yhat | labels).float().sum((1, 2, 3))
+    #iou = (intersection) / (union + 0.00001)
+    return intersection, union
+
+
+def IOU_parts(coords, yhat, labels, batch_size, threshold=0.8):
+    coords = coords.reshape(batch_size, -1, 3)
+    yhat = yhat.reshape(batch_size, -1, 1)
+    labels = labels.reshape(batch_size, -1, 1)
+
+    intersection = torch.zeros((batch_size, 1))
+    union = torch.zeros((batch_size, 1))
+    for i in range(batch_size):
+        yhat_i = coords[i][torch.squeeze(yhat[i] >= threshold)].cpu().numpy()
+        labels_i = coords[i][torch.squeeze(labels[i] == 1)].cpu().numpy()
+        if labels_i.shape[0] > 0:
+            kd_tree = KDTree(labels_i, leafsize=16)
+            dist, _ = kd_tree.query(yhat_i, k=1)
+            hits = (dist == 0)
+            hits_sum = np.sum(hits)
+            intersection[i] += hits_sum
+            union[i] += yhat_i.shape[0] + labels_i.shape[0] - hits_sum
+        else:
+            union[i] += yhat_i.shape[0]
+    return intersection, union

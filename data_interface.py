@@ -256,7 +256,7 @@ class WeaponDatasetGeneratorHighRes():
             np.save(self.target_path + str(index) + "_label.npy", coords)
 
 
-def sample(volume_n, label_n, npoints=2**10, side_len=32, sampling='one', down_fact=0, side_len_down=0, share_box=0.5, test=False):
+def sample(volume_n, label_n, npoints=2**10, side_len=32, sampling='one', down_fact=0, side_len_down=0, share_box=0.5, test=False, position=None):
     """Do sampling of volumes with arbitrary resolution 
     1. Extract window of size side_len**3
     2. Sample npoints points from extracted window, create labels for points
@@ -271,24 +271,37 @@ def sample(volume_n, label_n, npoints=2**10, side_len=32, sampling='one', down_f
                           volume_n.shape[2], volume_n.shape[3]]
 
     # Get starting and end points of extracted window
-    if side_len != -1:
-        x_start = int(np.random.randint(sampling_shapes_tc[1], size=(1)))
-        y_start = int(np.random.randint(sampling_shapes_tc[2], size=(1)))
-        z_start = int(np.random.randint(sampling_shapes_tc[3], size=(1)))
+    ones = 0
+    while(ones == 0):
+        if side_len != -1:
+            x_start = int(np.random.randint(sampling_shapes_tc[1], size=(1)))
+            y_start = int(np.random.randint(sampling_shapes_tc[2], size=(1)))
+            z_start = int(np.random.randint(sampling_shapes_tc[3], size=(1)))
 
-        x_end = x_start + side_len
-        y_end = y_start + side_len
-        z_end = z_start + side_len
-    # Can be used for low res volumes, if total volume should be used
-    else:
-        x_start = 0
-        y_start = 0
-        z_start = 0
+            if position is not None:
+                x_start = position[0]
+                y_start = position[1]
+                z_start = position[2]
 
-        x_end = sampling_shapes_tc[1]
-        y_end = sampling_shapes_tc[2]
-        z_end = sampling_shapes_tc[3]
+            x_end = x_start + side_len
+            y_end = y_start + side_len
+            z_end = z_start + side_len
+        # Can be used for low res volumes, if total volume should be used
+        else:
+            x_start = 0
+            y_start = 0
+            z_start = 0
 
+            x_end = sampling_shapes_tc[1]
+            y_end = sampling_shapes_tc[2]
+            z_end = sampling_shapes_tc[3]
+            # Only use labels of extracted window
+        mask = (label_n[:, 0] >= x_start) & (label_n[:, 0] < x_end) & \
+            (label_n[:, 1] >= y_start) & (label_n[:, 1] < y_end) & \
+            (label_n[:, 2] >= z_start) & (label_n[:, 2] < z_end)
+        ones = np.sum(mask) + (1 if random.random() < 0.1 else 0)
+        if position is not None:
+            break
     # Downsampled volume +++++++++++++++++++++++++++++++++++++++++++++++++++++
     # Check if downsampeld window should be created as well
     if down_fact > 0 and side_len_down > 0:
@@ -320,11 +333,6 @@ def sample(volume_n, label_n, npoints=2**10, side_len=32, sampling='one', down_f
             volume_down, down_fact, down_fact)
 
     # Downsampled volume +++++++++++++++++++++++++++++++++++++++++++++++++++++
-
-    # Only use labels of extracted window
-    mask = (label_n[:, 0] >= x_start) & (label_n[:, 0] < x_end) & \
-           (label_n[:, 1] >= y_start) & (label_n[:, 1] < y_end) & \
-           (label_n[:, 2] >= z_start) & (label_n[:, 2] < z_end)
 
     # Adapat labels to extracted window coordinates
     label_n = label_n[mask]
@@ -394,12 +402,125 @@ def sample(volume_n, label_n, npoints=2**10, side_len=32, sampling='one', down_f
 
     return out
 
+
+def sample_unet(volume_n, label_n, side_len=32, down_fact=0, side_len_down=0, test=False, position=None):
+    """Do sampling of volumes with arbitrary resolution 
+    1. Extract window of size side_len**3
+    2. Sample npoints points from extracted window, create labels for points
+    3. Extracted by down_fact downsampled window from volume around extracted window ( size = (side_len_down * 2)**3)
+
+
+    Returns:
+        Window, Points, Labels, (If test: All coords of actual object), Downsampled Window
+    """
+    volume_n = np.squeeze(volume_n, axis=0)
+    sampling_shapes_tc = [0, volume_n.shape[1],
+                          volume_n.shape[2], volume_n.shape[3]]
+
+    # Get starting and end points of extracted window
+    ones = 0
+    while(ones == 0):
+        if side_len != -1:
+            x_start = int(np.random.randint(sampling_shapes_tc[1], size=(1)))
+            y_start = int(np.random.randint(sampling_shapes_tc[2], size=(1)))
+            z_start = int(np.random.randint(sampling_shapes_tc[3], size=(1)))
+
+            if position is not None:
+                x_start = position[0]
+                y_start = position[1]
+                z_start = position[2]
+
+            x_end = x_start + side_len
+            y_end = y_start + side_len
+            z_end = z_start + side_len
+        # Can be used for low res volumes, if total volume should be used
+        else:
+            x_start = 0
+            y_start = 0
+            z_start = 0
+
+            x_end = sampling_shapes_tc[1]
+            y_end = sampling_shapes_tc[2]
+            z_end = sampling_shapes_tc[3]
+            # Only use labels of extracted window
+        mask = (label_n[:, 0] >= x_start) & (label_n[:, 0] < x_end) & \
+            (label_n[:, 1] >= y_start) & (label_n[:, 1] < y_end) & \
+            (label_n[:, 2] >= z_start) & (label_n[:, 2] < z_end)
+        ones = np.sum(mask) + (1 if random.random() < 0.1 else 0)
+        if position is not None:
+            break
+    # Downsampled volume +++++++++++++++++++++++++++++++++++++++++++++++++++++
+    # Check if downsampeld window should be created as well
+    if down_fact > 0 and side_len_down > 0:
+        # Start in the middle of the extracted window
+        x_start_down = int(x_start + side_len/2)
+        y_start_down = int(y_start + side_len/2)
+        z_start_down = int(z_start + side_len/2)
+
+        # Pad if extraced window is to small
+        pad_x_front = max(down_fact * side_len_down - x_start_down, 0)
+        pad_y_front = max(down_fact * side_len_down - y_start_down, 0)
+        pad_z_front = max(down_fact * side_len_down - z_start_down, 0)
+
+        pad_x_back = max(down_fact * side_len_down -
+                         (sampling_shapes_tc[1] - x_start_down), 0)
+        pad_y_back = max(down_fact * side_len_down -
+                         (sampling_shapes_tc[2] - y_start_down), 0)
+        pad_z_back = max(down_fact * side_len_down -
+                         (sampling_shapes_tc[3] - z_start_down), 0)
+
+        volume_down = np.pad(volume_n, ((0, 0), (pad_x_front, pad_x_back),
+                                        (pad_y_front, pad_y_back), (pad_z_front, pad_z_back)))
+        volume_down = torch.from_numpy(volume_down[:, x_start_down + pad_x_front - side_len_down * down_fact:x_start_down + pad_x_front + side_len_down * down_fact,
+                                                   y_start_down + pad_y_front - side_len_down * down_fact:y_start_down + pad_y_front + side_len_down * down_fact,
+                                                   z_start_down + pad_z_front - side_len_down * down_fact:z_start_down + pad_z_front + side_len_down * down_fact]).to(device)
+
+        # Do downsampling
+        volume_down = nn.functional.avg_pool3d(
+            volume_down, down_fact, down_fact)
+
+    # Downsampled volume +++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+    # Adapat labels to extracted window coordinates
+    label_n = label_n[mask]
+    label_n[:, 0] -= x_start
+    label_n[:, 1] -= y_start
+    label_n[:, 2] -= z_start
+    label_n = label_n.astype(int)
+
+    # Do the actual window extraction
+    volume_n = volume_n[:, x_start:x_end, y_start:y_end, z_start:z_end]
+    sampling_shapes_tc = [0, volume_n.shape[1],
+                          volume_n.shape[2], volume_n.shape[3]]
+
+    # If Volume smaller then side_len pad
+    if side_len != -1:
+        volume_n = np.pad(volume_n, ((0, 0), (0, max(side_len - sampling_shapes_tc[1], 0)),
+                                     (0, max(side_len - sampling_shapes_tc[2], 0)), (0, max(side_len - sampling_shapes_tc[3], 0))))
+
+    # Return depending on required output
+    label_volume = np.squeeze(np.zeros_like(volume_n))
+    label_volume[label_n[:,0], label_n[:,1], label_n[:,2]] = 1
+    label_volume = np.expand_dims(label_volume, axis=0)
+    out = [torch.from_numpy(volume_n).float(),
+           torch.from_numpy(label_volume).float()]
+
+    if down_fact > 0 and side_len_down > 0:
+        out = out + [volume_down.float()]
+
+    return out
 # Custom collate_fn's that create batches of samples
 
 
 def many_to_one_collate_fn(batch):
     volumes = np.stack([elm[0] for elm in batch], axis=0)
     labels = np.stack([elm[1] for elm in batch], axis=0).reshape(-1, 3)
+    return volumes, labels
+
+
+def many_to_one_collate_fn_list(batch):
+    volumes = [elm[0] for elm in batch]
+    labels = [elm[1] for elm in batch]
     return volumes, labels
 
 
@@ -412,6 +533,16 @@ def many_to_one_collate_fn_sample(batch, down=False):
         return volumes, coords, labels, low_volumes
     else:
         return volumes, coords, labels
+
+
+def many_to_one_collate_fn_sample_unet(batch, down=False):
+    volumes = torch.stack([elm[0] for elm in batch], dim=0)
+    labels = torch.stack([elm[1] for elm in batch], dim=0)
+    if down:
+        low_volumes = torch.stack([elm[2] for elm in batch], dim=0)
+        return volumes, labels, low_volumes
+    else:
+        return volumes, labels
 
 
 def many_to_one_collate_fn_sample_test(batch):

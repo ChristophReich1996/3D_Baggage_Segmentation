@@ -1,7 +1,7 @@
 
 import torch.nn as nn
 import torch.optim as optim
-from networks_hilo import Res_Auto_3d_Model_Occu_Parallel, Network_Generator
+from networks_hilo_unet import Res_Auto_3d_Model_Unet_Parallel, Network_Generator
 from data_interface import WeaponDataset, many_to_one_collate_fn
 from config import device
 import argparse
@@ -18,9 +18,6 @@ parser.add_argument('-sld', '-side_len_down',
 # Downsampling factor
 parser.add_argument('-df', '-down_factor', required='True',
                     choices=['2', '4', '8', '16', '32'])
-# Number of points to sample
-parser.add_argument('-np', '-npoints', required='True',
-                    type=int, choices=range(14))
 # Learning rate
 parser.add_argument('-lr', '-learning_rate', required='True',
                     choices=['3', '4', '5', '6'])
@@ -37,7 +34,6 @@ parser.add_argument('-n', '-name', required='False', default='')
 args = parser.parse_args()
 
 side_len = int(args.sl)
-npoints = 2**int(args.np)
 lr = 1 * 10**(-float(args.lr))
 cache_type = str(args.ct)
 side_len_down = int(args.sld)
@@ -71,7 +67,7 @@ network = Network_Generator(rate_learn=lr,
                             size_print_every=2**6,
                             oj_loss=oj_loss,
                             optimizer=optim.Adam,
-                            oj_model=Res_Auto_3d_Model_Occu_Parallel().to(device),
+                            oj_model=Res_Auto_3d_Model_Unet_Parallel().to(device),
                             collate_fn=many_to_one_collate_fn)
 
 print("Completed", flush=True)
@@ -80,7 +76,7 @@ print("Training", flush=True)
 network.train(train_dataset=train_dataset,
               val_dataset=val_dataset,
               side_len=side_len,
-              npoints=npoints,
+              npoints=0,
               name=name,
               load=load,
               down_fact=down_fact,
