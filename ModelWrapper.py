@@ -1,5 +1,6 @@
 from typing import Callable, Dict, List, Tuple
 
+import math
 import numpy as np
 import torch
 import torch.nn as nn
@@ -168,7 +169,13 @@ class OccupancyNetworkWrapper(object):
         print('Precision = {}'.format(test_precision))
         print('Recall = {}'.format(test_recall))
         print('Test loss = {}'.format(test_loss))
-        print('Average memory usage per sample: Original volume = {}MB, Label = {}MB, Prediction = {}MB'.format(round(test_size_volume,2), round(test_size_actual,2), round(test_size_prediction,2)))
+        print('Average memory usage per sample: Original volume = {}MB, Label = {}MB, Prediction = {}MB, Bounding box = {}MB'.format(
+            round(test_size_volume,2), 
+            round(test_size_actual,2), 
+            round(test_size_prediction,2), 
+            round(Misc.get_tensor_size_mb(torch.rand((
+                math.ceil(test_bounding_box_shape_x), math.ceil(test_bounding_box_shape_y), math.ceil(test_bounding_box_shape_z)))),2)
+            ))
         return test_iou, test_precision, test_recall, test_loss
 
     def logging(self, metric_name: str, value: float) -> None:

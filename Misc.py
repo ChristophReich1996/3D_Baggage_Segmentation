@@ -18,12 +18,11 @@ def intersection_over_union_bounding_box(prediction: torch.tensor, coordinates: 
     dist_coordinates_to_label = torch.from_numpy(dist_coordinates_to_label).to(prediction.device)
     # Estimate which coordinates belongs to a weapon
     coordinates_label = coordinates[dist_coordinates_to_label == 1.0]  # 1 if weapon 0 if not
-    if coordinates.shape[0] == 0:
+    if coordinates_label.shape[0] == 0:
         return torch.tensor([1]), torch.tensor([0, 0, 0])
     # Get max and min coordinates for bounding box
     max_coordinates_label = torch.max(coordinates_label, dim=0)[0] + offset.to(coordinates_label.device) # Index 0 to get values
     min_coordinates_label = torch.min(coordinates_label, dim=0)[0] - offset.to(coordinates_label.device) # Index 0 to get values
-    # print('\n', max_coordinates_label, min_coordinates_label)
     # Apply threshold
     prediction = prediction.view(-1)
     prediction = (prediction > threshold).float()
@@ -32,7 +31,6 @@ def intersection_over_union_bounding_box(prediction: torch.tensor, coordinates: 
     # Get max and min of prediction
     max_coordinates_prediction = torch.max(coordinates[prediction == 1.0], dim=0)[0]  # Index 0 to get values
     min_coordinates_prediction = torch.min(coordinates[prediction == 1.0], dim=0)[0]  # Index 0 to get values
-    # print('\n', max_coordinates_prediction, min_coordinates_prediction)
     # Calc volume of label bounding box
     edge_sizes_label = torch.abs(max_coordinates_label - min_coordinates_label)
     bounding_box_label_volume = torch.prod(edge_sizes_label)
