@@ -1,0 +1,9 @@
+{
+    "python.pythonPath": "/visinf/home/vilab14/anaconda3/envs/learning/bin/python"
+}
+"[python]": {
+    "editor.formatOnPaste": false
+}
+"[python]": {
+    "editor.formatOnSave": true
+}
