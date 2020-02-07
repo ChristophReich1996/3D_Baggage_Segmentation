@@ -99,7 +99,8 @@ class Network_Generator():
                             samples_id = []
                             for i in range(batch_size):
                                 # Sample volume, to get original volume back,
-                                # as well as downsampled volume, coords, and corresponding labels
+                                # as well as downsampled volume
+                                # Continue if volume too small vor the given position
                                 if volume_in[i].shape[1] - vol_x <= 0 or \
                                         volume_in[i].shape[2] - vol_y <= 0 or \
                                         volume_in[i].shape[3] - vol_z <= 0:
@@ -111,7 +112,9 @@ class Network_Generator():
                                 if samp is None:
                                     continue
                                 samples.append(samp)
+                                # Remember if volume is part of batch
                                 samples_id.append(i)
+
                             if len(samples) == 0:
                                 continue
 
@@ -120,15 +123,18 @@ class Network_Generator():
                                 samples, down=True)
                             volume, labels, volume_down = batch_in
 
+                            # Device tensors
                             volume_d = volume.to(device)
                             labels_d = labels.to(device)
                             self._oj_model.eval()
+
                             # Eval network
                             yhat = self._oj_model(
                                 volume_d, volume_down.to(device))
                             intersection, union = layers.IOU_unet_val_parts(
                                 yhat, labels_d, volume.shape[0], threshold=0.4)
 
+                            # Save counts and calculate iou later for total volumes
                             intersection_batch[samples_id] += intersection
                             union_batch[samples_id] += union
 
@@ -141,7 +147,7 @@ class Network_Generator():
         return np.mean(np.array(iou_per_batch))
 
     def draw(self, test_dataset, side_len, name, down_fact, side_len_down, batch_size=1):
-        """Draw one example
+        """Draws one(!) example
 
         Arguments:
             test_dataset {torch dataset} -- Dataset to test on network
@@ -199,6 +205,7 @@ class Network_Generator():
                                         if samp is None:
                                             continue
                                         samples.append(samp)
+                                        # Remember if volume is part of batch
                                         samples_id.append(i)
                                     if len(samples) == 0:
                                         continue
@@ -208,6 +215,7 @@ class Network_Generator():
                                         samples, down=True)
                                     volume, labels, volume_down = batch_in
 
+                                    # Device tensors
                                     volume_d = volume.to(device)
                                     labels_d = labels.to(device)
                                     self._oj_model.eval()
@@ -215,6 +223,7 @@ class Network_Generator():
                                     yhat = self._oj_model(
                                         volume_d, volume_down.to(device))
 
+                                    # Write one example
                                     to_write = (yhat[0] >= 0.7).cpu(
                                     ).numpy().astype(np.short)
                                     to_write_l = labels_d[0].cpu(
@@ -281,6 +290,7 @@ class Network_Generator():
                     batch_in = many_to_one_collate_fn_sample_unet(
                         samples, down=True)
                     volume, labels, volume_down = batch_in
+                    # Device tensors
                     volume_d = volume.to(device)
                     labels_d = labels.to(device)
                     self._oj_model.eval()
@@ -289,11 +299,10 @@ class Network_Generator():
                     # Computes validation loss
                     loss_val_batch = self._oj_loss(
                         yhat, labels_d).item()
-                    # If iou set, calcl IOU
+                    # If iou set, calc IOU
                     if iou:
                         loss_iou_batch = layers.IOU_unet_val(
                             yhat, labels_d, volume.shape[0]).item()
-                        print(loss_iou_batch)
                         losses_iou_batch.append(loss_iou_batch)
                     losses_val_batch.append(loss_val_batch)
                     # Urgently needed due to incredibly bad garbage collection by python
@@ -316,7 +325,7 @@ class Network_Generator():
             train_dataset {torch dataset} -- Dataset to train on network
             val_dataset {torch dataset} -- Dataset to validate on network
             side_len {long} -- Extracted window size
-            npoints {long} -- Number of points to sample
+            npoints {long} -- Number of points to sample TODO: refactor, not needed
             name {string} -- Name of stored network file
 
         Keyword Arguments:
@@ -457,22 +466,26 @@ class Network_Generator():
                 loss_train_batch, mse_train_batch, loss_train_samples = _step_train(
                     batch_in, True)
 
+                # Update draw_counts
                 for x, i in enumerate(indices):
                     if cache_type == 'hardness':
                         draw_counts[i] = loss_train_samples[x]
                     elif cache_type == 'counts':
                         draw_counts[i] += 1
 
+                # Print training loss
                 if i_ % 32 == 32-1:
                     print("Training Loss Batch", _, i_, type(self._oj_loss).__name__, loss_train_batch,
                           "MSE", mse_train_batch, flush=True)
 
+                # Validate
                 if i_ % self._size_print_every == self._size_print_every-1:
                     loss_val, iou = self._val(loader_val, losses_val, npoints=npoints, side_len=side_len,
                                               down_fact=down_fact, side_len_down=side_len_down, iou=True,
                                               cache_vol=cache_vol_val, cache_labels=cache_labels_val)
                     print("Validation Loss", loss_val,
                           "IOU", iou, "Best IOU", loss_best)
+                    # Save if improved iou
                     if iou > loss_best:
                         loss_best = iou
                         torch.save(self._oj_model.state_dict(
@@ -492,30 +505,11 @@ class Res_Auto_3d_Model_Unet_Parallel(nn.Module):
     def forward(self, volume, volume_low):
         return self.model(volume, volume_low)
 
-    def bounding_box(self, volume, side_len):
-        x = torch.arange(0, volume.shape[1])
-        y = torch.arange(0, volume.shape[2])
-        z = torch.arange(0, volume.shape[3])
-        x, y, z = torch.meshgrid(x, y, z)
-        query = torch.cat((torch.unsqueeze(x.reshape(-1), dim=1), torch.unsqueeze(
-            y.reshape(-1), dim=1),  torch.unsqueeze(z.reshape(-1), dim=1)), dim=1)
-        query = query.float().to(device) * side_len
-        volume = torch.unsqueeze(volume, dim=1).float()
-        mask = torch.squeeze(self.inference(volume, query) == 1)
-        hits = query[mask]
-
-        maxes = torch.max(hits, dim=0)[0].int()
-        mines = torch.min(hits, dim=0)[0].int()
-        return mines[0].item(), maxes[0].item(), mines[1].item(), maxes[1].item(), mines[2].item(), maxes[2].item()
-
-    def inference(self, volume, coords, volume_low):
-        return (torch.sign(self.forward(volume, coords, volume_low) - 0.7) + 1) / 2
-
 
 class Res_Auto_3d_Model_Unet(nn.Module):
     def __init__(self):
         super(Res_Auto_3d_Model_Unet, self).__init__()
-        self.activation = nn.Sigmoid
+        self.activation = nn.SELU
         self.encode = nn.Sequential(layers.Res_Block_Down_3D(1, 32, 3, 1, self.activation(), True),
                                     layers.Res_Block_Down_3D(
                                         32, 64, 3, 1, self.activation(), False),

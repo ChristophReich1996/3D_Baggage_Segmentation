@@ -216,7 +216,8 @@ def IOU(coords, yhat, labels, batch_size, threshold=0.01):
     yhat = yhat.reshape(batch_size, -1, 1)
     labels = labels.reshape(batch_size, -1, 1)
 
-    iou_batch = []
+    intersection = np.zeros((batch_size, 1))
+    union = np.zeros((batch_size, 1))
     for i in range(batch_size):
         yhat_i = coords[i][torch.squeeze(yhat[i] >= threshold)].cpu().numpy()
         labels_i = coords[i][torch.squeeze(labels[i] == 1)].cpu().numpy()
@@ -225,20 +226,18 @@ def IOU(coords, yhat, labels, batch_size, threshold=0.01):
             dist, _ = kd_tree.query(yhat_i, k=1)
             hits = (dist == 0)
             hits_sum = np.sum(hits)
-            iou_batch.append(
-                hits_sum / (yhat_i.shape[0] + labels_i.shape[0] - hits_sum))
+            intersection += hits_sum
+            union += yhat_i.shape[0] + labels_i.shape[0] - hits_sum
         else:
-            pass
-            # iou_batch.append(0.0)
-            # 1 - (yhat_i.shape[0] / (yhat_i.shape[0] + coords[i].shape[0] - yhat_i.shape[0])))
+            union += yhat_i.shape[0]
 
-    return np.mean(np.array(iou_batch))
+    return np.mean(intersection / union)
 
 
 def IOU_unet_val(yhat, labels, batch_size, threshold=0.5):
     yhat = torch.squeeze(yhat, dim=1)
     labels = torch.squeeze(labels, dim=1)
-    #print("mean", torch.max(yhat), torch.mean(yhat))
+    # print("mean", torch.max(yhat), torch.mean(yhat))
     yhat = (yhat >= threshold)
     labels = (labels == 1)
     intersection = (yhat & labels).float().sum((0, 1, 2, 3))
@@ -250,13 +249,13 @@ def IOU_unet_val(yhat, labels, batch_size, threshold=0.5):
 def IOU_unet_val_parts(yhat, labels, batch_size, threshold=0.6):
     yhat = torch.squeeze(yhat, dim=1)
     labels = torch.squeeze(labels, dim=1)
-    #print("mean", torch.max(yhat), torch.mean(yhat))
+    # print("mean", torch.max(yhat), torch.mean(yhat))
     yhat = (yhat >= threshold)
     labels = (labels == 1)
 
     intersection = (yhat & labels).float().sum((1, 2, 3))
     union = (yhat | labels).float().sum((1, 2, 3))
-    #iou = (intersection) / (union + 0.00001)
+    # iou = (intersection) / (union + 0.00001)
     return intersection, union
 
 

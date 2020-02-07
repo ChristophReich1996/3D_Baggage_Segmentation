@@ -83,8 +83,8 @@ class Network_Generator():
                 volume_in, label_in = batch
                 shapes = np.max(
                     np.array([volume_in[i].shape for i in range(batch_size)]), axis=0)
-                intersection = torch.zeros((batch_size, 1))
-                union = torch.zeros((batch_size, 1))
+                intersection = torch.zeros((batch_size))
+                union = torch.zeros((batch_size))
 
                 # Consider any extractable window of size side_len**3 to write total object
                 for vol_x in range(0, shapes[1], side_len):
@@ -128,7 +128,7 @@ class Network_Generator():
                                 yhat, labels.to(device)).item()
                             # If iou set, calcl IOU
                             intersection_patch, union_patch = layers.IOU_parts(
-                                coords, yhat, labels, volume.shape[0])
+                                coords, yhat, labels, volume.shape[0], threshold=0.5)
                             intersection[samples_id] += intersection_patch
                             union[samples_id] += union_patch
                             losses_test_batch.append(loss_val_batch)
@@ -136,7 +136,7 @@ class Network_Generator():
                             gc.collect()
                             loss_iou_batch = torch.mean(intersection / union)
                             print(loss_iou_batch, layers.IOU(
-                                coords, yhat, labels, volume.shape[0]))
+                                coords, yhat, labels, volume.shape[0], threshold=0.5))
 
         loss_test = np.mean(losses_test_batch)
         loss_iou = loss_iou_batch
@@ -344,8 +344,8 @@ class Network_Generator():
         torch.cuda.empty_cache()
 
         # "historically grown"
-        down_sample = side_len
-        win_size = 32
+        down_sample = 1
+        win_size = side_len
 
         # Create tensor to write object
         to_write = np.empty((0, 3))
@@ -408,8 +408,8 @@ class Network_Generator():
                             coords_sampled_torch = torch.from_numpy(
                                 coords_sampled).float()
 
-                            yhat = self._oj_model.inference(volume.to(device), coords_sampled_torch.to(
-                                device), volume_down.to(device))
+                            yhat = (self._oj_model(volume.to(device), coords_sampled_torch.to(
+                                device), volume_down.to(device)) > 0.7).float()
 
                             coords_hit = coords_sampled_torch[torch.squeeze(
                                 yhat == 1)].cpu().numpy()
@@ -432,7 +432,7 @@ class Network_Generator():
                 vol = volume_in[0]
                 maximum = np.max(vol)
                 vol = vol/maximum
-                vol[vol - 0.17 < 0] = 0
+                vol[vol - 0.01 < 0] = 0
 
                 with open('outfile_org.obj', 'w') as f:
                     for i in range(vol.shape[1]):
@@ -488,9 +488,9 @@ class Network_Generator():
                             # Sample volume, to get original volume back,
                             # as well as downsampled volume, coords, and corresponding labels
                         ones = 0
-                        while(ones==0):
+                        while(ones == 0):
                             samp = sample(cache_vol[i + j], cache_labels[i + j], npoints=npoints, side_len=side_len, test=False,
-                                      down_fact=down_fact, side_len_down=side_len_down, share_box=0.0)
+                                          down_fact=down_fact, side_len_down=side_len_down, share_box=0.0)
                             ones = torch.sum(samp[2]).item()
                         if samp is None:
                             continue
@@ -510,7 +510,7 @@ class Network_Generator():
                     # If iou set, calcl IOU
                     if iou:
                         loss_iou_batch = layers.IOU(
-                            coords, yhat, labels, volume.shape[0])
+                            coords, yhat, labels, volume.shape[0], threshold=0.5)
                         losses_iou_batch.append(loss_iou_batch)
                     losses_val_batch.append(loss_val_batch)
                     # Urgently needed due to incredibly bad garbage collection by python
@@ -661,9 +661,9 @@ class Network_Generator():
                 samples = []
                 for i in indices:
                     ones = 0
-                    while(ones==0):
+                    while(ones == 0):
                         samp = sample(cache_vol[i], cache_labels[i], npoints=npoints,
-                                  side_len=side_len, test=False, down_fact=down_fact, side_len_down=side_len_down)
+                                      side_len=side_len, test=False, down_fact=down_fact, side_len_down=side_len_down)
                         ones = torch.sum(samp[2]).item()
                     if samp is None:
                         continue
@@ -674,22 +674,27 @@ class Network_Generator():
                 loss_train_batch, mse_train_batch, loss_train_samples = _step_train(
                     batch_in, True)
 
+                # Update draw_counts
                 for x, i in enumerate(indices):
                     if cache_type == 'hardness':
                         draw_counts[i] = loss_train_samples[x]
                     elif cache_type == 'counts':
                         draw_counts[i] += 1
 
+                # Print training los
                 if i_ % 32 == 32-1:
                     print("Training Loss Batch", _, i_, type(self._oj_loss).__name__, loss_train_batch,
                           "MSE", mse_train_batch, flush=True)
 
+                # Validate
                 if i_ % self._size_print_every == self._size_print_every-1:
                     loss_val, iou = self._val(loader_val, losses_val, npoints=npoints, side_len=side_len,
                                               down_fact=down_fact, side_len_down=side_len_down, iou=True,
                                               cache_vol=cache_vol_val, cache_labels=cache_labels_val)
                     print("Validation Loss", loss_val,
                           "IOU", iou, "Best IOU", loss_best)
+
+                    # Save network if improved iou
                     if iou > loss_best:
                         loss_best = iou
                         torch.save(self._oj_model.state_dict(
@@ -703,55 +708,39 @@ class Network_Generator():
 class Res_Auto_3d_Model_Occu_Parallel(nn.Module):
     def __init__(self):
         super(Res_Auto_3d_Model_Occu_Parallel, self).__init__()
-
         self.model = nn.DataParallel(Res_Auto_3d_Model_Occu())
 
     def forward(self, volume, coords, volume_low):
         return self.model(volume, coords, volume_low)
 
-    def bounding_box(self, volume, side_len):
-        x = torch.arange(0, volume.shape[1])
-        y = torch.arange(0, volume.shape[2])
-        z = torch.arange(0, volume.shape[3])
-        x, y, z = torch.meshgrid(x, y, z)
-        query = torch.cat((torch.unsqueeze(x.reshape(-1), dim=1), torch.unsqueeze(
-            y.reshape(-1), dim=1),  torch.unsqueeze(z.reshape(-1), dim=1)), dim=1)
-        query = query.float().to(device) * side_len
-        volume = torch.unsqueeze(volume, dim=1).float()
-        mask = torch.squeeze(self.inference(volume, query) == 1)
-        hits = query[mask]
-
-        maxes = torch.max(hits, dim=0)[0].int()
-        mines = torch.min(hits, dim=0)[0].int()
-        return mines[0].item(), maxes[0].item(), mines[1].item(), maxes[1].item(), mines[2].item(), maxes[2].item()
-
-    def inference(self, volume, coords, volume_low):
-        return (torch.sign(self.forward(volume, coords, volume_low) - 0.7) + 1) / 2
-
 
 class Res_Auto_3d_Model_Occu(nn.Module):
     def __init__(self):
         super(Res_Auto_3d_Model_Occu, self).__init__()
-
-        self.encode = nn.Sequential(layers.Res_Block_Down_3D(1, 32, 3, 1, nn.SELU(), True),
+        self.activation = nn.SELU
+        self.encode = nn.Sequential(layers.Res_Block_Down_3D(1, 32, 3, 1, self.activation(), True),
                                     layers.Res_Block_Down_3D(
-                                        32, 64, 3, 1, nn.SELU(), True),
+                                        32, 64, 3, 1, self.activation(), True),
                                     layers.Res_Block_Down_3D(
-                                        64, 64, 3, 1, nn.SELU(), False),
+                                        64, 64, 3, 1, self.activation(), False),
                                     layers.Res_Block_Down_3D(
-                                        64, 64, 3, 1, nn.SELU(), False),
-                                    layers.Res_Block_Down_3D(64, 16, 3, 1, nn.SELU(), False))
+                                        64, 64, 3, 1, self.activation(), False),
+                                    layers.Res_Block_Down_3D(
+                                        64, 64, 3, 1, self.activation(), False),
+                                    layers.Res_Block_Down_3D(64, 32, 3, 1, self.activation(), False))
 
-        self.encode_low = nn.Sequential(layers.Res_Block_Down_3D(1, 32, 3, 1, nn.SELU(), True),
+        self.encode_low = nn.Sequential(layers.Res_Block_Down_3D(1, 32, 3, 1, self.activation(), True),
                                         layers.Res_Block_Down_3D(
-                                            32, 64, 3, 1, nn.SELU(), True),
+                                            32, 64, 3, 1, self.activation(), True),
                                         layers.Res_Block_Down_3D(
-                                            64, 64, 3, 1, nn.SELU(), False),
+                                            64, 64, 3, 1, self.activation(), False),
                                         layers.Res_Block_Down_3D(
-                                            64, 64, 3, 1, nn.SELU(), False),
-                                        layers.Res_Block_Down_3D(64, 16, 3, 1, nn.SELU(), False))
+                                            64, 64, 3, 1, self.activation(), False),
+                                        layers.Res_Block_Down_3D(
+                                            64, 64, 3, 1, self.activation(), False),
+                                        layers.Res_Block_Down_3D(64, 32, 3, 1, self.activation(), False))
 
-        self.decode = nn.Sequential(layers.Res_Block_Up_Flat(2048 + 3, 512, nn.SELU()), # 6912
+        self.decode = nn.Sequential(layers.Res_Block_Up_Flat(4096 + 3, 512, nn.SELU()),  # 6912
                                     layers.Res_Block_Up_Flat(
                                         512, 512, nn.SELU()),
                                     # layers.Res_Block_Up_Flat(
