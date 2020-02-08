@@ -17,7 +17,7 @@ def intersection_over_union_bounding_box(prediction: torch.tensor, coordinates: 
     del _  # Help the python garbage collector
     dist_coordinates_to_label = torch.from_numpy(dist_coordinates_to_label).to(prediction.device)
     # Estimate which coordinates belongs to a weapon
-    coordinates_label = coordinates[dist_coordinates_to_label == 1.0]  # 1 if weapon 0 if not
+    coordinates_label = coordinates[dist_coordinates_to_label == 0.0]  # 1 if weapon 0 if not
     if coordinates_label.shape[0] == 0:
         return torch.tensor([1]), torch.tensor([0, 0, 0])
     # Get max and min coordinates for bounding box
@@ -66,7 +66,7 @@ def intersection_over_union(prediction: torch.tensor, coordinates: torch.tensor,
     del _  # Help the python garbage collector
     dist_coordinates_to_label = torch.from_numpy(dist_coordinates_to_label).to(prediction.device)
     # Estimate which coordinates belongs to a weapon
-    coordinates_label = (dist_coordinates_to_label == 1.0).float()  # 1 if weapon 0 if not
+    coordinates_label = (dist_coordinates_to_label == 0.0).float()  # 1 if weapon 0 if not
     # Reshape prediction to one dimension
     prediction = prediction.view(-1)
     # Apply threshold
@@ -96,7 +96,7 @@ def precision(prediction: torch.tensor, coordinates: torch.tensor, label: torch.
     del _  # Help the python garbage collector
     dist_coordinates_to_label = torch.from_numpy(dist_coordinates_to_label).to(prediction.device)
     # Estimate which coordinates belongs to a weapon
-    coordinates_label = (dist_coordinates_to_label == 1.0).float()  # 1 if weapon 0 if not
+    coordinates_label = (dist_coordinates_to_label == 0.0).float()  # 1 if weapon 0 if not
     # Reshape prediction to one dimension
     prediction = prediction.view(-1)
     # Apply threshold
@@ -119,7 +119,7 @@ def recall(prediction: torch.tensor, coordinates: torch.tensor, label: torch.ten
     del _  # Help the python garbage collector
     dist_coordinates_to_label = torch.from_numpy(dist_coordinates_to_label).to(prediction.device)
     # Estimate which coordinates belongs to a weapon
-    coordinates_label = (dist_coordinates_to_label == 1.0).float()  # 1 if weapon 0 if not
+    coordinates_label = (dist_coordinates_to_label == 0.0).float()  # 1 if weapon 0 if not
     # Reshape prediction to one dimension
     prediction = prediction.view(-1)
     # Apply threshold

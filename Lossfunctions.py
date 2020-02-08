@@ -13,7 +13,7 @@ def dice_loss(prediction: torch.tensor, label: torch.tensor, smooth: float = 1.0
     prediction = prediction.view(-1)
     label = label.view(-1)
     # Calc loss
-    intersect = torch.sum((prediction * label) + smooth)
+    intersect = torch.sum((prediction * label))+ smooth
     union = torch.sum(prediction) + torch.sum(label) + smooth
     loss = 1.0 - ((2.0 * intersect) / (union))
     return loss
