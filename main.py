@@ -14,7 +14,7 @@ import Misc
 
 if __name__ == '__main__':
     # Batch size has to be a factor of the number of devices used in data parallel
-    os.environ["CUDA_VISIBLE_DEVICES"] = '1,5'#"0, 1, 3, 4, 5"
+    os.environ["CUDA_VISIBLE_DEVICES"] = '1,5 '#"0, 1, 3, 4, 5"
     model = Models.OccupancyNetwork()
     model = torch.nn.DataParallel(model)
     ModelWrapper.OccupancyNetworkWrapper(occupancy_network=model,
@@ -29,11 +29,11 @@ if __name__ == '__main__':
                                              num_workers=2, pin_memory=True),
                                          validation_data=None,
                                          test_data=None,
-                                         loss_function=Lossfunctions.dice_loss
+                                         loss_function=BCELoss(reduction='mean')
                                          ).train(epochs=100, model_save_path='/visinf/home/vilab16/3D_baggage_segmentation/')
 
     
-    # model = torch.load('/visinf/home/vilab16/3D_baggage_segmentation/' + 'occupancy_network_cuda.pt').module
+    # model = torch.load('/visinf/home/vilab16/3D_baggage_segmentation/' + 'occupancy_network_lo_lo_dice_cuda.pt').module
     # ModelWrapper.OccupancyNetworkWrapper(occupancy_network=model,
     #                                      occupancy_network_optimizer=torch.optim.Adam(model.parameters(), lr=1e-05),
     #                                      training_data=None,

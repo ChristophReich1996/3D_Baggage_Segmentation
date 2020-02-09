@@ -83,7 +83,7 @@ class OccupancyNetworkWrapper(object):
             average_loss = self.get_average_metric_for_epoch(metric_name='train_loss', epoch=epoch)
             if save_best_model and (best_loss > average_loss):
                 torch.save(self.occupancy_network,
-                           model_save_path + 'occupancy_network_' + 'lo_lo_dice_' + self.device + '.pt')
+                           model_save_path + 'occupancy_network_again' + self.device + '.pt')
         progress_bar.close()
 
     def test(self, draw: bool = True, side_len: int = 1, threshold: float = 0.5) -> Tuple[float, float, float, float]:
