@@ -211,7 +211,7 @@ class FocalLoss(nn.Module):
             return F_loss
 
 
-def IOU(coords, yhat, labels, batch_size, threshold=0.01):
+def IOU(coords, yhat, labels, batch_size, threshold=0.5):
     coords = coords.reshape(batch_size, -1, 3)
     yhat = yhat.reshape(batch_size, -1, 1)
     labels = labels.reshape(batch_size, -1, 1)
@@ -246,7 +246,7 @@ def IOU_unet_val(yhat, labels, batch_size, threshold=0.5):
     return torch.mean(iou)
 
 
-def IOU_unet_val_parts(yhat, labels, batch_size, threshold=0.6):
+def IOU_unet_val_parts(yhat, labels, batch_size, threshold=0.5):
     yhat = torch.squeeze(yhat, dim=1)
     labels = torch.squeeze(labels, dim=1)
     # print("mean", torch.max(yhat), torch.mean(yhat))
@@ -259,7 +259,7 @@ def IOU_unet_val_parts(yhat, labels, batch_size, threshold=0.6):
     return intersection, union
 
 
-def IOU_parts(coords, yhat, labels, batch_size, threshold=0.8):
+def IOU_parts(coords, yhat, labels, batch_size, threshold=0.5):
     coords = coords.reshape(batch_size, -1, 3)
     yhat = yhat.reshape(batch_size, -1, 1)
     labels = labels.reshape(batch_size, -1, 1)

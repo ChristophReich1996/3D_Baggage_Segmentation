@@ -235,7 +235,7 @@ class WeaponDatasetGeneratorHighRes():
             min_x, min_y, min_z = np.min(coords, axis=0)
 
             # Slice volume down to bouding box of labels
-            offset = 5
+            offset = 25
             start_x = int(max(min_x-offset, 0))
             start_y = int(max(min_y-offset, 0))
             start_z = int(max(min_z-offset, 0))
@@ -586,7 +586,7 @@ if __name__ == '__main__':
 
         else:
             dataset_gen = WeaponDatasetGeneratorHighRes(root="../../../projects_students/Smiths_LKA_Weapons/ctix-lka-20190503/",
-                                                        target_path="../../../../fastdata/Smiths_LKA_Weapons/len_1/")
+                                                        target_path="../../../../fastdata/Smiths_LKA_Weapons/len_1_/")
             dataset_gen.generate_data()
     else:
         if args.a == "check":

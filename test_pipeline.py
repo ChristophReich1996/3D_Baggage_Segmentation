@@ -52,7 +52,7 @@ elif args.cr == 'dice':
 length = 1 if action == 'draw' else 200
 offset = 2791 if action == 'draw' else 2729
 print("Load Dataset:", end=" ", flush=True)
-test_dataset = WeaponDataset(target_path="../../../../fastdata/Smiths_LKA_Weapons/len_1/",
+test_dataset = WeaponDataset(target_path="../../../../fastdata/Smiths_LKA_Weapons/len_1_/",
                              length=length,
                              offset=offset)
 print("Test Set Completed", end=" - ", flush=True)

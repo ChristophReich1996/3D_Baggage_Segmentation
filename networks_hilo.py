@@ -78,20 +78,22 @@ class Network_Generator():
         losses_iou_batch = []
         # Test with same settings as for training and additionally calculate IOU
         with torch.no_grad():
-            for batch in loader_test:
+            for batch_counter, batch in enumerate(loader_test):
                 self._oj_model.eval()
                 volume_in, label_in = batch
                 shapes = np.max(
                     np.array([volume_in[i].shape for i in range(batch_size)]), axis=0)
-                intersection = torch.zeros((batch_size))
-                union = torch.zeros((batch_size))
+                intersection = torch.zeros((batch_size, 1))
+                union = torch.zeros((batch_size, 1))
+                loss_iou_batch = 0
 
                 # Consider any extractable window of size side_len**3 to write total object
                 for vol_x in range(0, shapes[1], side_len):
+                    print("x", vol_x, "Batch", batch_counter, flush=True)
+                    print(loss_iou_batch)
                     for vol_y in range(0, shapes[2], side_len):
                         for vol_z in range(0, shapes[3], side_len):
                             # Get extracted window and downsampled extracted window, SEE sample in data_interface.py for further information
-                            print("x", vol_x, "y", vol_y, "z", vol_z)
 
                             samples = []
                             samples_id = []
@@ -128,18 +130,17 @@ class Network_Generator():
                                 yhat, labels.to(device)).item()
                             # If iou set, calcl IOU
                             intersection_patch, union_patch = layers.IOU_parts(
-                                coords, yhat, labels, volume.shape[0], threshold=0.5)
+                                coords, yhat, labels, volume.shape[0], threshold=0.7)
                             intersection[samples_id] += intersection_patch
                             union[samples_id] += union_patch
                             losses_test_batch.append(loss_val_batch)
                             # Urgently needed due to incredibly bad garbage collection by python
                             gc.collect()
-                            loss_iou_batch = torch.mean(intersection / union)
-                            print(loss_iou_batch, layers.IOU(
-                                coords, yhat, labels, volume.shape[0], threshold=0.5))
+                            loss_iou_batch = torch.mean(intersection / (union + 0.00001))
+                losses_iou_batch.append(loss_iou_batch)
 
         loss_test = np.mean(losses_test_batch)
-        loss_iou = loss_iou_batch
+        loss_iou = np.mean(losses_iou_batch)
 
         return loss_test, loss_iou
 
@@ -345,7 +346,7 @@ class Network_Generator():
 
         # "historically grown"
         down_sample = 1
-        win_size = side_len
+        win_size = 16
 
         # Create tensor to write object
         to_write = np.empty((0, 3))

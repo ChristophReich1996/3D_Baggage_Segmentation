@@ -64,7 +64,7 @@ class Network_Generator():
         """
         # Get test set
         loader_test = DataLoader(dataset=test_dataset, batch_size=batch_size,
-                                 pin_memory=False, shuffle=True, collate_fn=many_to_one_collate_fn_list)
+                                 pin_memory=False, shuffle=False, collate_fn=many_to_one_collate_fn_list)
 
         # Restore network for testing
         checkpoint = torch.load("model/" + type(self._oj_model).__name__ + "_" + str(device) + name + ".pt",
@@ -132,7 +132,7 @@ class Network_Generator():
                             yhat = self._oj_model(
                                 volume_d, volume_down.to(device))
                             intersection, union = layers.IOU_unet_val_parts(
-                                yhat, labels_d, volume.shape[0], threshold=0.4)
+                                yhat, labels_d, volume.shape[0], threshold=0.5)
 
                             # Save counts and calculate iou later for total volumes
                             intersection_batch[samples_id] += intersection
@@ -224,7 +224,7 @@ class Network_Generator():
                                         volume_d, volume_down.to(device))
 
                                     # Write one example
-                                    to_write = (yhat[0] >= 0.7).cpu(
+                                    to_write = (yhat[0] >= 0.5).cpu(
                                     ).numpy().astype(np.short)
                                     to_write_l = labels_d[0].cpu(
                                     ).numpy().astype(np.short)
