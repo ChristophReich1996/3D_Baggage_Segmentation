@@ -6,10 +6,12 @@ import numpy as np
 import os
 from pykdtree.kdtree import KDTree
 
+import ModelParts
+
 
 def intersection_over_union_bounding_box(prediction: torch.tensor, coordinates: torch.tensor, label: torch.tensor,
                                          threshold: float = 0.5,
-                                         offset: torch.tensor = torch.tensor([10.0, 10.0, 10.0])) -> torch.tensor:
+                                         offset: torch.tensor = torch.tensor([5.0, 5.0, 5.0])) -> torch.tensor:
     # Init kd tree
     kd_tree = KDTree(label.cpu().numpy(), leafsize=16)
     # Estimate which coordinates are weapons
@@ -30,7 +32,7 @@ def intersection_over_union_bounding_box(prediction: torch.tensor, coordinates: 
     prediction = prediction.view(-1)
     prediction = (prediction > threshold).float()
     if coordinates[prediction == 1.0].shape[0] == 0:
-        return torch.tensor([0]), torch.tensor([0, 0, 0])
+        return torch.tensor([0]), torch.tensor([0, 0, 0]), torch.tensor([0, 0, 0])
     # Get max and min of prediction
     max_coordinates_prediction = torch.max(coordinates[prediction == 1.0], dim=0)[0]  # Index 0 to get values
     min_coordinates_prediction = torch.min(coordinates[prediction == 1.0], dim=0)[0]  # Index 0 to get values
@@ -49,7 +51,10 @@ def intersection_over_union_bounding_box(prediction: torch.tensor, coordinates: 
     intersection = torch.prod(overlap)
     # Calc intersection over union by: intersection / (volume label + volume prediction - intersection)
     iou = intersection / (bounding_box_prediction_volume + bounding_box_label_volume - intersection + + 1e-9)
-    return iou.cpu(), edge_size_prediction.cpu()
+    # Calc error
+    bounding_box_error = torch.max(torch.abs(max_coordinates_prediction - max_coordinates_label),
+                                   torch.abs(min_coordinates_prediction - min_coordinates_label))
+    return iou.cpu(), edge_size_prediction.cpu(), bounding_box_error.cpu()
 
 
 def intersection_over_union(prediction: torch.tensor, coordinates: torch.tensor, label: torch.tensor,
@@ -70,7 +75,7 @@ def intersection_over_union(prediction: torch.tensor, coordinates: torch.tensor,
     del _  # Help the python garbage collector
     dist_coordinates_to_label = torch.from_numpy(dist_coordinates_to_label).to(prediction.device)
     # Estimate which coordinates belongs to a weapon
-    coordinates_label = (dist_coordinates_to_label == 1.0).float()  # 1 if weapon 0 if not
+    coordinates_label = (dist_coordinates_to_label == 0.0).float()  # 1 if weapon 0 if not
     # Reshape prediction to one dimension
     prediction = prediction.view(-1)
     # Apply threshold
@@ -83,13 +88,15 @@ def intersection_over_union(prediction: torch.tensor, coordinates: torch.tensor,
     iou = intersection / (union + 1e-9)
     return iou
 
+
 def get_tensor_size_mb(tensor: torch.tensor):
     """
     Method that calculates the megabyte needed for a tensor to be stored. Takes into account if tensor is on CPU or GPU.
     :param tensor: (torch.tensor) Input tensor
     :return: (int) Tensor size in megabyte
     """
-    return tensor.nelement() * tensor.element_size() * 1e-6                                        
+    return tensor.nelement() * tensor.element_size() * 1e-6
+
 
 def precision(prediction: torch.tensor, coordinates: torch.tensor, label: torch.tensor,
               threshold: float = 0.5) -> torch.tensor:
@@ -100,7 +107,7 @@ def precision(prediction: torch.tensor, coordinates: torch.tensor, label: torch.
     del _  # Help the python garbage collector
     dist_coordinates_to_label = torch.from_numpy(dist_coordinates_to_label).to(prediction.device)
     # Estimate which coordinates belongs to a weapon
-    coordinates_label = (dist_coordinates_to_label == 1.0).float()  # 1 if weapon 0 if not
+    coordinates_label = (dist_coordinates_to_label == 0.0).float()  # 1 if weapon 0 if not
     # Reshape prediction to one dimension
     prediction = prediction.view(-1)
     # Apply threshold
@@ -123,7 +130,7 @@ def recall(prediction: torch.tensor, coordinates: torch.tensor, label: torch.ten
     del _  # Help the python garbage collector
     dist_coordinates_to_label = torch.from_numpy(dist_coordinates_to_label).to(prediction.device)
     # Estimate which coordinates belongs to a weapon
-    coordinates_label = (dist_coordinates_to_label == 1.0).float()  # 1 if weapon 0 if not
+    coordinates_label = (dist_coordinates_to_label == 0.0).float()  # 1 if weapon 0 if not
     # Reshape prediction to one dimension
     prediction = prediction.view(-1)
     # Apply threshold
@@ -180,19 +187,24 @@ def get_normalization_3d(normalization: str, channels: int) -> nn.Sequential:
         raise RuntimeError('Normalization {} is not available!'.format(normalization))
 
 
-def get_normalization_1d(normalization: str, channels: int) -> nn.Sequential:
+def get_normalization_1d(normalization: str, channels: int, channels_latent: int = None) -> Union[
+    nn.Sequential, nn.Module]:
     """
     Method to return different types of 1D normalization operations
     :param normalization: (str) Type of normalization ('batchnorm', 'instancenorm')
     :param channels: (int) Number of channels to use
     :return: (nn.Sequential) Normalization operation
     """
-    assert normalization in ['batchnorm', 'instancenorm'], \
+    assert normalization in ['batchnorm', 'instancenorm', 'cbatchnorm', 'none'], \
         'Normalization {} is not available!'.format(normalization)
     if normalization == 'batchnorm':
         return nn.Sequential(nn.BatchNorm1d(channels))
     elif normalization == 'instancenorm':
         return nn.Sequential(nn.InstanceNorm1d(channels))
+    elif normalization == 'cbatchnorm':
+        return ModelParts.CBatchNorm1d(channels_latent, channels)
+    elif normalization == 'none':
+        return nn.Sequential()
     else:
         raise RuntimeError('Normalization {} is not available!'.format(normalization))
 

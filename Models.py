@@ -14,26 +14,27 @@ class OccupancyNetwork(nn.Module):
 
     def __init__(self, number_of_encoding_blocks: int = 5,  # 5,  # Encoding path parameters
                  channels_in_encoding_blocks: List[Tuple[int]] =
-                  [(1, 64), (64, 64), (64, 64), (64, 64), (64,3)],
-                #  [(1, 32), (32, 64), (64, 128), (128, 64), (64, 32), (32, 3)],
+                 [(1, 32), (32, 64), (64, 128), (128, 32), (32, 3)],
+                 #   [(1, 32), (32, 64), (64, 128),(128, 64), (64, 32), (32, 3)],
+                 #   [(1, 64), (64, 128), (128, 256),(256, 128), (128, 64), (64, 3)],
                  kernel_size_encoding: Union[int, List[int]] = 3, stride_encoding: Union[int, List[int]] = 1,
                  padding_encoding: Union[int, List[int]] = 1,
-                 activation_encoding: Union[str, List[str]] = 'prelu',
+                 activation_encoding: Union[str, List[str]] = 'leaky relu',
                  downsampling_encoding: Union[str, List[str]] =
-                  ['none', 'averagepool', 'averagepool', 'averagepool', 'averagepool'],
-                #  ['none', 'averagepool', 'averagepool', 'averagepool', 'averagepool', 'none'],
+                 #   ['none', 'averagepool', 'averagepool', 'averagepool', 'averagepool'],
+                 ['averagepool', 'averagepool', 'averagepool', 'averagepool', 'none'],
                  downsampling_factor_encoding: Union[int, List[int]] = 2,
-                 normalization_encoding: Union[str, List[str]] = 'batchnorm',
+                 normalization_encoding: Union[str, List[str]] = 'instancenorm',
                  dropout_rate_encoding: Union[float, List[float]] = 0.0,
                  bias_encoding: Union[bool, List[bool]] = True,
-                 number_of_decoding_blocks: int = 6,  # Decoding path parameter
+                 number_of_decoding_blocks: int = 4,  # Decoding path parameter
                  channels_in_decoding_blocks: List[Tuple[int]] =
-                 [(180 + 3, 256), (256, 256), (256, 512), (512, 256), (256, 256), (256, 1)],
-                 activation_decoding: Union[str, List[str]] = 'prelu',
-                 normalization_decoding: Union[str, List[str]] = 'batchnorm',
-                 dropout_rate_decoding: Union[float, List[float]] = [0,0,0,0,0,0],
+                 [(180 + 3, 64), (64, 64), (64, 64), (64, 64)],
+                 #  [(180 + 3, 256), (256, 256), (256, 256), (256, 256), (256, 256), (256, 1)],
+                 activation_decoding: Union[str, List[str]] = 'selu',
+                 normalization_decoding: Union[str, List[str]] = 'cbatchnorm',
+                 dropout_rate_decoding: Union[float, List[float]] = [0.02, 0.0, 0.0, 0.0],
                  bias_decoding: Union[bool, List[bool]] = True,
-                 bias_residual_decoding: Union[bool, List[bool]] = True,
                  output_activation: str = 'sigmoid') -> None:
         """
         Constructor method
@@ -91,8 +92,6 @@ class OccupancyNetwork(nn.Module):
                                                    'dropout rate decoding')
         bias_decoding = Misc.parse_to_list(bias_decoding, number_of_decoding_blocks,
                                            'bias decoding')
-        bias_residual_decoding = Misc.parse_to_list(bias_residual_decoding, number_of_decoding_blocks,
-                                                    'bias residual decoding')
 
         # Init encoding blocks
         self.encoding = nn.Sequential(*[ModelParts.VolumeEncoderBlock(
@@ -110,18 +109,20 @@ class OccupancyNetwork(nn.Module):
             for index in range(number_of_encoding_blocks)])
 
         # Init decoding blocks
-        self.decoding = nn.Sequential(*[ModelParts.CoordinatesFullyConnectedBlock(
-            input_channels=channels_in_decoding_blocks[index][0],
-            output_channels=channels_in_decoding_blocks[index][1],
-            activation=activation_decoding[index],
-            normalization=normalization_decoding[index],
-            dropout_rate=dropout_rate_decoding[index],
-            bias=bias_decoding[index],
-            bias_residual=bias_residual_decoding[index])
-            for index in range(number_of_decoding_blocks)])
+        self.decoding = nn.ModuleList()
+        for index in range(number_of_decoding_blocks):
+            self.decoding.append(ModelParts.CoordinatesFullyConnectedBlock(
+                input_channels=channels_in_decoding_blocks[index][0],
+                output_channels=channels_in_decoding_blocks[index][1],
+                activation=activation_decoding[index],
+                normalization=normalization_decoding[index],
+                dropout_rate=dropout_rate_decoding[index],
+                bias=bias_decoding[index]))
 
         # Init output activation
-        self.output_activation = Misc.get_activation(output_activation)
+        self.output_block = nn.Sequential(
+        nn.Linear(in_features=channels_in_decoding_blocks[-1][1], out_features=1, bias=True),
+        Misc.get_activation(output_activation))
 
     def forward(self, volume: torch.tensor, coordinates: torch.tensor) -> torch.tensor:
         """
@@ -141,10 +142,16 @@ class OccupancyNetwork(nn.Module):
         # # Perform decoding path
         # output_decoding = self.decoding(input_decoding)
 
-        out = self.encoding(volume)
-        out = out.view(out.shape[0], -1)
-        out = torch.cat((torch.repeat_interleave(out, int(coordinates.shape[0] / volume.shape[0]), dim=0), coordinates),
-                        dim=1)
-        out = self.decoding(out)
-        out = self.output_activation(out)
-        return out  # output_decoding
+        output_encoding = self.encoding(volume)
+        out_encoding_flatten = output_encoding.view(output_encoding.shape[0], -1)
+        input_decoding = torch.cat((torch.repeat_interleave(out_encoding_flatten,
+                                                            int(coordinates.shape[0] / volume.shape[0]), dim=0),
+                                    coordinates),
+                                   dim=1)
+        for index, block in enumerate(self.decoding):
+            if index == 0:
+                output_decoding = block(input_decoding, input_decoding)
+            else:
+                output_decoding = block(output_decoding, input_decoding)
+        output = self.output_block(output_decoding)
+        return output

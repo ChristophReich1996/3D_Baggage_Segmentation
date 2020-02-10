@@ -9,8 +9,9 @@ import Misc
 
 
 class WeaponDataset(data.Dataset):
-    def __init__(self, target_path_volume: str, target_path_label: str, length: int, dim_max: int = 640, npoints: int = 2 ** 10, side_len: int = 32,
-                 sampling: str = 'one', offset: int = 0, test: bool = False, share_box: float = 0.5) -> None:
+    def __init__(self, target_path_volume: str, target_path_label: str, length: int, dim_max: int = 640,
+                 npoints: int = 2 ** 10, side_len: int = 32,
+                 sampling: str = 'one', offset: int = 0, test: bool = False, share_box: float = 0.4) -> None:
         """
         Constructor method
         :param target_path_volume: (str)
@@ -34,7 +35,7 @@ class WeaponDataset(data.Dataset):
         self.offset = offset
         self.test = test
         self.index_wrapper = Misc.FilePermutation()
-        self.share_box=share_box
+        self.share_box = share_box
 
     def __getitem__(self, index: int) -> Tuple[torch.tensor]:
         """
@@ -48,7 +49,7 @@ class WeaponDataset(data.Dataset):
         # Load volume and label
         volume_n = np.load(self.target_path_volume + str(index) + ".npy")
         label_n = np.load(self.target_path_label + str(index) + "_label.npy")
-        
+
         sampling_shapes_tc = [0, volume_n.shape[1] * self.side_len, volume_n.shape[2] * self.side_len,
                               volume_n.shape[3] * self.side_len]
 
@@ -67,7 +68,8 @@ class WeaponDataset(data.Dataset):
 
         elif self.sampling == 'one_fast':
             # Coords with one as label
-            coords_one = label_n[np.random.choice(label_n.shape[0], int(self.npoints * self.share_box), replace=False), :]
+            coords_one = label_n[np.random.choice(label_n.shape[0], int(self.npoints * self.share_box), replace=False),
+                         :]
 
             # Mixed Coords
             x_n = np.random.randint(sampling_shapes_tc[1], size=(int(self.npoints * (1 - self.share_box)), 1))
@@ -80,7 +82,8 @@ class WeaponDataset(data.Dataset):
 
         elif self.sampling == 'one':
             # Coords with one as label
-            coords_one = label_n[np.random.choice(label_n.shape[0], int(self.npoints * self.share_box), replace=False), :]
+            coords_one = label_n[np.random.choice(label_n.shape[0], int(self.npoints * self.share_box), replace=False),
+                         :]
 
             # Mixed Coords
             x_n = np.random.randint(sampling_shapes_tc[1], size=(int(self.npoints * (1 - self.share_box)), 1))
@@ -143,4 +146,3 @@ class WeaponDataset(data.Dataset):
             for i in range(label.shape[0]):
                 f.write("v " + " " + str(label[i][0]) + " " + str(label[i][1]) + " " + str(label[i][2]) +
                         " " + str(0) + " " + str(0) + " " + str(1) + "\n")
-

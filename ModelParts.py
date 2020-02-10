@@ -12,7 +12,7 @@ class VolumeEncoderBlock(nn.Module):
     """
 
     def __init__(self, input_channels: int, output_channels: int, kernel_size: int = 3, stride: int = 1,
-                 padding: int = 1, activation: str = 'prelu', downsampling: str = 'avarage pool',
+                 padding: int = 1, activation: str = 'prelu', downsampling: str = 'averagepool',
                  downsampling_factor: int = 2, normalization: str = 'batchnorm', dropout_rate: float = 0.0,
                  bias: bool = True) -> None:
         """
@@ -78,8 +78,7 @@ class CoordinatesFullyConnectedBlock(nn.Module):
     """
 
     def __init__(self, input_channels: int, output_channels: int, activation: str = 'selu',
-                 normalization: str = 'batchnorm', dropout_rate: float = 0.0, bias: bool = True,
-                 bias_residual: bool = True) -> None:
+                 normalization: str = 'batchnorm', dropout_rate: float = 0.0, bias: bool = True) -> None:
         """
         Constructor method
         :param input_channels: (int) Number of input channels
@@ -96,21 +95,15 @@ class CoordinatesFullyConnectedBlock(nn.Module):
         self.activation_1 = Misc.get_activation(activation=activation)
         self.activation_2 = Misc.get_activation(activation=activation)
         # Init normalizations
-        self.normalization_1 = Misc.get_normalization_1d(normalization=normalization, channels=output_channels)
-        self.normalization_2 = Misc.get_normalization_1d(normalization=normalization, channels=output_channels)
+        self.normalization_1 = Misc.get_normalization_1d(normalization=normalization, channels=output_channels,
+                                                         channels_latent=183)
+        self.normalization_2 = Misc.get_normalization_1d(normalization=normalization, channels=output_channels,
+                                                         channels_latent=183)
         # Init linear operations
         self.linear_1 = nn.Linear(in_features=input_channels, out_features=output_channels, bias=bias)
         self.linear_2 = nn.Linear(in_features=output_channels, out_features=output_channels, bias=bias)
-        # Init linear mapping for residual connection if number of channels is changing compared to the input
-        if input_channels != output_channels:
-            # Init linear operation to adopt number of channels in residual
-            self.residual_mapping = nn.Linear(in_features=input_channels, out_features=output_channels,
-                                              bias=bias_residual)
-        else:
-            # If number of channels are not changing init identity mapping with empty nn.Sequential object
-            self.residual_mapping = nn.Sequential()
 
-    def forward(self, input: torch.tensor) -> torch.tensor:
+    def forward(self, input: torch.tensor, latent_tensor: torch.tensor = None) -> torch.tensor:
         """
         Forward pass of the fully connected block
         :param input: (torch.tensor) Input coordinates with shape (batch size, channels_in)
@@ -118,15 +111,63 @@ class CoordinatesFullyConnectedBlock(nn.Module):
         """
         # First stage
         output_linear_1 = self.linear_1(input)
-        output_normalization_1 = self.normalization_1(output_linear_1)
+        if isinstance(self.normalization_1, CBatchNorm1d):
+            output_normalization_1 = self.normalization_1(output_linear_1, latent_tensor)
+        else:
+            output_normalization_1 = self.normalization_1(output_linear_1)
         output_activation_1 = self.activation_1(output_normalization_1)
         if self.dropout_rate > 0.0:  # Perform dropout
             output_activation_1 = F.dropout(output_activation_1, p=self.dropout_rate)
         # Second stage
         output_linear_2 = self.linear_2(output_activation_1)
-        output_normalization_2 = self.normalization_2(output_linear_2)
-        output_activation_2 = self.activation_2(output_normalization_2)
-        # Residual mapping
-        residual = self.residual_mapping(input)
-        output = output_activation_2 + residual
+        if isinstance(self.normalization_2, CBatchNorm1d):
+            output_normalization_2 = self.normalization_2(output_linear_2, latent_tensor)
+        else:
+            output_normalization_2 = self.normalization_2(output_linear_2)
+        output = self.activation_2(output_normalization_2)
         return output
+
+
+class CBatchNorm1d(nn.Module):
+    """
+    Source: https://github.com/autonomousvision/occupancy_networks/blob/master/im2mesh/layers.py
+    """
+
+    def __init__(self, c_dim, f_dim):
+        """
+        Conditional batch normalization layer class
+        :param c_dim: (int) dimension of latent conditioned code c
+        :param f_dim: (int) feature dimension
+        """
+        super(CBatchNorm1d, self).__init__()
+        self.c_dim = c_dim
+        self.f_dim = f_dim
+        # Submodules
+        self.conv_gamma = nn.Conv1d(c_dim, f_dim, 1)
+        self.conv_beta = nn.Conv1d(c_dim, f_dim, 1)
+        self.bn = nn.BatchNorm1d(f_dim, affine=False)
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        nn.init.zeros_(self.conv_gamma.weight)
+        nn.init.zeros_(self.conv_beta.weight)
+        nn.init.ones_(self.conv_gamma.bias)
+        nn.init.zeros_(self.conv_beta.bias)
+
+    def forward(self, x, c):
+        assert (x.size(0) == c.size(0))
+        assert (c.size(1) == self.c_dim)
+
+        # c is assumed to be of size batch_size x c_dim x T
+        if len(c.size()) == 2:
+            c = c.unsqueeze(2)
+
+        # Affine mapping
+        gamma = self.conv_gamma(c)
+        beta = self.conv_beta(c)
+
+        # Norm
+        net = self.bn(x)
+        out = gamma[:, :, 0] * net + beta[:, :, 0]
+
+        return out
