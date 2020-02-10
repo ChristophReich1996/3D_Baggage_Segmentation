@@ -16,7 +16,7 @@ if __name__ == '__main__':
     # Batch size has to be a factor of the number of devices used in data parallel
     os.environ["CUDA_VISIBLE_DEVICES"] = '1'  # "0, 1, 3, 4, 5"
     # Init model
-    model = torch.load('occupancy_network_cuda.pt').module # Models.OccupancyNetwork()
+    model = torch.load('occupancy_network_cuda_10_02.pt').module  # Models.OccupancyNetwork()
     # Print model
     print(model)
     # Print number of parameters included in the model
@@ -53,7 +53,14 @@ if __name__ == '__main__':
                                                          )
 
     # model_wrapper.train(epochs=200, model_save_path='/visinf/home/vilab15/Projects/3D_baggage_segmentation/')
-    model_wrapper.test(threshold=0.7)
+    offsets = [torch.tensor([0.0, 0.0, 0.0]), torch.tensor([2.0, 2.0, 2.0]), torch.tensor([4.0, 4.0, 4.0]),
+               torch.tensor([6.0, 6.0, 6.0]), torch.tensor([8.0, 8.0, 8.0]), torch.tensor([10.0, 10.0, 10.0]),
+               torch.tensor([15.0, 15.0, 15.0])]
+    thresholds = [0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+    for offset in offsets:
+        for threshold in thresholds:
+            print(offset, threshold)
+            model_wrapper.test(threshold=threshold, offset=offset)
     # model = torch.load('/visinf/home/vilab16/3D_baggage_segmentation/' + 'occupancy_network_lo_lo_dice_cuda.pt').module
     # ModelWrapper.OccupancyNetworkWrapper(occupancy_network=model,
     #                                      occupancy_network_optimizer=torch.optim.Adam(model.parameters(), lr=1e-05),

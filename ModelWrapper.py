@@ -130,7 +130,8 @@ class OccupancyNetworkWrapper(object):
                                                               threshold=threshold)[0].item())
         return float(np.mean(loss_values)), float(np.mean(iou_values)), float(np.mean(bb_iou_values))
 
-    def test(self, draw: bool = True, side_len: int = 1, threshold: float = 0.5) -> Tuple[float, float, float, float]:
+    def test(self, draw: bool = True, side_len: int = 1, threshold: float = 0.5,
+             offset: torch.tensor = torch.tensor([5.0, 5.0, 5.0])) -> Tuple[float, float, float, float]:
         # Init progress bar
         progress_bar = tqdm(total=len(self.test_data))
         # Get downsampling factor for input and calculate usampling factor
@@ -171,7 +172,8 @@ class OccupancyNetworkWrapper(object):
                 self.logging('iou', iou.item())
                 # Calc intersection over union for bounding box
                 iou_bounding_box, bounding_box_prediction_shape, bounding_box_error = \
-                    Misc.intersection_over_union_bounding_box(prediction, coordinates, actual[0], threshold=threshold)
+                    Misc.intersection_over_union_bounding_box(prediction, coordinates, actual[0], threshold=threshold,
+                                                              offset=offset)
                 self.logging('iou_bounding_box', iou_bounding_box.item())
                 self.logging('bounding_box_shape_x', bounding_box_prediction_shape[0].item())
                 self.logging('bounding_box_shape_y', bounding_box_prediction_shape[1].item())
