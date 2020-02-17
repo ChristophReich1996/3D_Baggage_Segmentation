@@ -48,27 +48,29 @@ class VolumeEncoderBlock(nn.Module):
         self.downsampling = Misc.get_downsampling_3d(downsampling=downsampling, factor=downsampling_factor,
                                                      channels=output_channels)
 
-    def forward(self, input: torch.tensor) -> torch.tensor:
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
         """
         Forward pass of the basic volume decoder block
         :param input: (torch.tensor) Input volume with shape (batch size, channels_in, x_in, y_in, z_in)
         :return: (torch.tensor) Output tensor with shape (batch size, channels_out, x_out, y_out, z_out)
         """
         # First stage
-        output_convolution_1 = self.convolution_1(input)
-        output_normalization_1 = self.normalization_1(output_convolution_1)
-        output_activation_1 = self.activation_1(output_normalization_1)
+        output = self.convolution_1(input)
+        output = self.normalization_1(output)
+        output = self.activation_1(output)
         if self.dropout_rate > 0.0:  # Perform dropout
-            output_activation_1 = F.dropout(output_activation_1, p=self.dropout_rate)
+            output = F.dropout(output, p=self.dropout_rate)
         # Second stage
-        output_convolution_2 = self.convolution_2(output_activation_1)
-        output_normalization_2 = self.normalization_2(output_convolution_2)
-        output_activation_2 = self.activation_2(output_normalization_2)
+        output = self.convolution_2(output)
+        output = self.normalization_2(output)
+        output = self.activation_2(output)
         if self.dropout_rate > 0.0:  # Perform dropout
-            output_activation_2 = F.dropout(output_activation_2, p=self.dropout_rate)
+            output = F.dropout(output, p=self.dropout_rate)
+        if input.shape == output.shape:
+            output = output + input
         # Downsampling stage
-        output_downsampling = self.downsampling(output_activation_2)
-        return output_downsampling
+        output = self.downsampling(output)
+        return output
 
 
 class CoordinatesFullyConnectedBlock(nn.Module):
@@ -96,14 +98,14 @@ class CoordinatesFullyConnectedBlock(nn.Module):
         self.activation_2 = Misc.get_activation(activation=activation)
         # Init normalizations
         self.normalization_1 = Misc.get_normalization_1d(normalization=normalization, channels=output_channels,
-                                                         channels_latent=183)
+                                                         channels_latent=303)
         self.normalization_2 = Misc.get_normalization_1d(normalization=normalization, channels=output_channels,
-                                                         channels_latent=183)
+                                                         channels_latent=303)
         # Init linear operations
         self.linear_1 = nn.Linear(in_features=input_channels, out_features=output_channels, bias=bias)
         self.linear_2 = nn.Linear(in_features=output_channels, out_features=output_channels, bias=bias)
 
-    def forward(self, input: torch.tensor, latent_tensor: torch.tensor = None) -> torch.tensor:
+    def forward(self, input: torch.Tensor, latent_tensor: torch.Tensor = None) -> torch.Tensor:
         """
         Forward pass of the fully connected block
         :param input: (torch.tensor) Input coordinates with shape (batch size, channels_in)
@@ -125,6 +127,8 @@ class CoordinatesFullyConnectedBlock(nn.Module):
         else:
             output_normalization_2 = self.normalization_2(output_linear_2)
         output = self.activation_2(output_normalization_2)
+        if input.shape == output.shape:
+            output = output + input
         return output
 
 
@@ -133,7 +137,7 @@ class CBatchNorm1d(nn.Module):
     Source: https://github.com/autonomousvision/occupancy_networks/blob/master/im2mesh/layers.py
     """
 
-    def __init__(self, c_dim, f_dim):
+    def __init__(self, c_dim: int, f_dim: int) -> None:
         """
         Conditional batch normalization layer class
         :param c_dim: (int) dimension of latent conditioned code c
@@ -148,13 +152,13 @@ class CBatchNorm1d(nn.Module):
         self.bn = nn.BatchNorm1d(f_dim, affine=False)
         self.reset_parameters()
 
-    def reset_parameters(self):
+    def reset_parameters(self) -> None:
         nn.init.zeros_(self.conv_gamma.weight)
         nn.init.zeros_(self.conv_beta.weight)
         nn.init.ones_(self.conv_gamma.bias)
         nn.init.zeros_(self.conv_beta.bias)
 
-    def forward(self, x, c):
+    def forward(self, x: torch.Tensor, c: torch.Tensor) -> torch.Tensor:
         assert (x.size(0) == c.size(0))
         assert (c.size(1) == self.c_dim)
 

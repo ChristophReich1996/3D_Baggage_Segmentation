@@ -19,6 +19,7 @@ class OccupancyNetworkWrapper(object):
     def __init__(self, occupancy_network: nn.Module, occupancy_network_optimizer: torch.optim.Optimizer,
                  training_data: torch.utils.data.dataloader,
                  test_data: torch.utils.data.dataloader,
+                 validation_data: torch.utils.data.dataloader,
                  loss_function: Callable[[torch.tensor, torch.tensor], torch.tensor], device: str = 'cuda') -> None:
         """
         Class constructor
@@ -35,6 +36,7 @@ class OccupancyNetworkWrapper(object):
         self.occupancy_network_optimizer = occupancy_network_optimizer
         self.training_data = training_data
         self.test_data = test_data
+        self.validation_data = validation_data
         self.loss_function = loss_function
         self.device = device
         self.metrics = dict()
@@ -94,26 +96,23 @@ class OccupancyNetworkWrapper(object):
             self.save_metrics(self.metrics, path=model_save_path)
         progress_bar.close()
 
-    def validate(self, samples: int = 20, threshold: float = 0.5) -> Tuple[float, float, float]:
+    def validate(self, threshold: float = 0.5) -> Tuple[float, float, float]:
         # Model into eval mode
         self.occupancy_network.eval()
-        # Get random indexes
-        indexes = np.random.choice(len(self.test_data.dataset), samples, replace=False)
         # Init list to save loss, iou, bb iou
         loss_values = []
         iou_values = []
         bb_iou_values = []
         # Loop over all indexes
-        for index in indexes:
-            # Calc no grads
-            with torch.no_grad():
-                # Get data
-                volume, coordinates, labels, actual = self.test_data.dataset[index]
+        # Calc no grads
+        with torch.no_grad():
+            # Get data
+            for volume, coordinates, labels, actual in self.test_data:
                 # Add batch size dim to data and to device
-                volume = volume.unsqueeze(dim=0).to(self.device)
+                volume = volume.to(self.device)
                 coordinates = coordinates.to(self.device)
                 labels = labels.to(self.device)
-                actual = actual.unsqueeze(dim=0).to(self.device)
+                actual = actual.to(self.device)
                 # Get prediction of model
                 if isinstance(self.occupancy_network, nn.DataParallel):
                     prediction = self.occupancy_network.module(volume, coordinates)
@@ -139,7 +138,7 @@ class OccupancyNetworkWrapper(object):
         # Calc no grads
         with torch.no_grad():
             # Iterate over test dataset
-            for idx, batch in enumerate(self.test_data):
+            for index, batch in enumerate(self.test_data):
                 # Update progress bar
                 progress_bar.update(1)
                 # Model into eval mode
@@ -166,7 +165,7 @@ class OccupancyNetworkWrapper(object):
                 actual_ = actual.reshape(-1, 3)
                 # Draw weapon prediction
                 if draw:
-                    Misc.draw_test(weapon_prediction, actual_, volume, side_len, idx)
+                    Misc.draw_test(weapon_prediction, actual_, volume, side_len, index)
                 # Calc intersection over union
                 iou = Misc.intersection_over_union(prediction, coordinates, actual[0], threshold=threshold)
                 self.logging('iou', iou.item())

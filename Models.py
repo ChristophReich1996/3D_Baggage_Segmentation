@@ -14,26 +14,26 @@ class OccupancyNetwork(nn.Module):
 
     def __init__(self, number_of_encoding_blocks: int = 5,  # 5,  # Encoding path parameters
                  channels_in_encoding_blocks: List[Tuple[int]] =
-                 [(1, 32), (32, 64), (64, 128), (128, 32), (32, 3)],
+                 [(1, 32), (32, 32), (32, 32), (32, 32), (32, 5)],
                  #   [(1, 32), (32, 64), (64, 128),(128, 64), (64, 32), (32, 3)],
                  #   [(1, 64), (64, 128), (128, 256),(256, 128), (128, 64), (64, 3)],
                  kernel_size_encoding: Union[int, List[int]] = 3, stride_encoding: Union[int, List[int]] = 1,
                  padding_encoding: Union[int, List[int]] = 1,
-                 activation_encoding: Union[str, List[str]] = 'leaky relu',
+                 activation_encoding: Union[str, List[str]] = 'prelu',
                  downsampling_encoding: Union[str, List[str]] =
                  #   ['none', 'averagepool', 'averagepool', 'averagepool', 'averagepool'],
-                 ['averagepool', 'averagepool', 'averagepool', 'averagepool', 'none'],
+                 ['averagepool', 'averagepool', 'maxpool', 'maxpool', 'none'],
                  downsampling_factor_encoding: Union[int, List[int]] = 2,
-                 normalization_encoding: Union[str, List[str]] = 'instancenorm',
+                 normalization_encoding: Union[str, List[str]] = 'batchnorm',
                  dropout_rate_encoding: Union[float, List[float]] = 0.0,
                  bias_encoding: Union[bool, List[bool]] = True,
-                 number_of_decoding_blocks: int = 4,  # Decoding path parameter
+                 number_of_decoding_blocks: int = 5,  # Decoding path parameter
                  channels_in_decoding_blocks: List[Tuple[int]] =
-                 [(180 + 3, 64), (64, 64), (64, 64), (64, 64)],
+                 [(300 + 3, 128), (128, 128), (128, 128), (128, 128), (128, 32)],
                  #  [(180 + 3, 256), (256, 256), (256, 256), (256, 256), (256, 256), (256, 1)],
                  activation_decoding: Union[str, List[str]] = 'selu',
                  normalization_decoding: Union[str, List[str]] = 'cbatchnorm',
-                 dropout_rate_decoding: Union[float, List[float]] = [0.02, 0.0, 0.0, 0.0],
+                 dropout_rate_decoding: Union[float, List[float]] = [0.025, 0.0, 0.0, 0.0, 0.0],
                  bias_decoding: Union[bool, List[bool]] = True,
                  output_activation: str = 'sigmoid') -> None:
         """
