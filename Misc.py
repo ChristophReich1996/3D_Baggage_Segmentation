@@ -11,7 +11,7 @@ import ModelParts
 
 def intersection_over_union_bounding_box(prediction: torch.tensor, coordinates: torch.tensor, label: torch.tensor,
                                          threshold: float = 0.5,
-                                         offset: torch.tensor = torch.tensor([5.0, 5.0, 5.0])) -> torch.tensor:
+                                         offset: torch.tensor = torch.tensor([0.0, 0.0, 0.0])) -> torch.tensor:
     # Init kd tree
     kd_tree = KDTree(label.cpu().numpy(), leafsize=16)
     # Estimate which coordinates are weapons
