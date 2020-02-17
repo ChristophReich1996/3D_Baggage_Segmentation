@@ -55,8 +55,8 @@ class OccupancyNetworkWrapper(object):
         progress_bar = tqdm(total=epochs * len(self.training_data.dataset))
         # Init best loss variable
         best_loss = np.inf
-        # Perform training
-        validation_loss, validation_iou, validation_bb_iou = self.validate()
+        # Init variables for progress bar
+        validation_loss, validation_iou, validation_bb_iou = np.inf, 0, 0
         for epoch in range(epochs):
             # Validate model
             for volumes, coordinates, labels in self.training_data:

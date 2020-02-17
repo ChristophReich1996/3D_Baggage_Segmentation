@@ -14,9 +14,9 @@ import Misc
 
 if __name__ == '__main__':
     # Batch size has to be a factor of the number of devices used in data parallel
-    os.environ["CUDA_VISIBLE_DEVICES"] = '2, 3'  # "0, 1, 3, 4, 5"
+    os.environ["CUDA_VISIBLE_DEVICES"] = '2'  # "0, 1, 3, 4, 5"
     # Init model
-    model = Models.OccupancyNetwork()  # torch.load('occupancy_network_cuda_10_02.pt').module
+    model = Models.OccupancyNetwork().cuda()  # torch.load('occupancy_network_cuda_10_02.pt').module
     # Print model
     print(model)
     # Print number of parameters included in the model
@@ -33,9 +33,9 @@ if __name__ == '__main__':
                                                              npoints=2 ** 14,
                                                              side_len=8,
                                                              length=2600),
-                                                             batch_size=1, shuffle=True,
+                                                             batch_size=16, shuffle=True,
                                                              collate_fn=Misc.many_to_one_collate_fn_sample,
-                                                             num_workers=1, pin_memory=True),
+                                                             num_workers=16, pin_memory=True),
                                                          test_data=DataLoader(Datasets.WeaponDataset(
                                                              target_path_volume='/fastdata/Smiths_LKA_Weapons_Down/len_8/',
                                                              target_path_label='/fastdata/Smiths_LKA_Weapons_Down/len_1/',
@@ -63,10 +63,10 @@ if __name__ == '__main__':
                                                              num_workers=1, pin_memory=True,
                                                          ),
                                                          loss_function=torch.nn.BCELoss(reduction='mean'),
-                                                         device='cpu')
+                                                         device='cuda')
 
-    model_wrapper.train(epochs=300, model_save_path='/visinf/home/vilab15/Projects/3D_baggage_segmentation/')
-    model_wrapper.test(threshold=0.7, offset=torch.tensor([12.0, 12.0, 12.0]))  # Best offset=10 threshold=0.8
+    model_wrapper.train(epochs=100, model_save_path='/visinf/home/vilab15/Projects/3D_baggage_segmentation/')
+    model_wrapper.test(threshold=0.5, offset=torch.tensor([0.0, 0.0, 0.0]))  # Best offset=10 threshold=0.8
 
     # model = torch.load('/visinf/home/vilab16/3D_baggage_segmentation/' + 'occupancy_network_lo_lo_dice_cuda.pt').module
     # ModelWrapper.OccupancyNetworkWrapper(occupancy_network=model,

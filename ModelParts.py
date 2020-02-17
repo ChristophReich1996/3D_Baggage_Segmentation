@@ -7,7 +7,7 @@ import Misc
 
 class VolumeEncoderBlock(nn.Module):
     """
-    Basic Volume Encoder Block
+    Basic Volume Residual Encoder Block
     (convolution + normalization + activation) -> (convolution + normalization + activation) -> (downsampling)
     """
 
@@ -44,6 +44,12 @@ class VolumeEncoderBlock(nn.Module):
                                        kernel_size=kernel_size, stride=stride, padding=padding, bias=bias)
         self.convolution_2 = nn.Conv3d(in_channels=output_channels, out_channels=output_channels,
                                        kernel_size=kernel_size, stride=stride, padding=padding, bias=bias)
+        # Init residual mapping
+        if input_channels == output_channels:
+            self.residual_mapping = nn.Identity()
+        else:
+            self.residual_mapping = nn.Conv3d(in_channels=input_channels, out_channels=output_channels,
+                                              kernel_size=(1, 1, 1), stride=(1, 1, 1), padding=(0, 0, 0), bias=bias)
         # Init downsampling operation
         self.downsampling = Misc.get_downsampling_3d(downsampling=downsampling, factor=downsampling_factor,
                                                      channels=output_channels)
@@ -66,8 +72,7 @@ class VolumeEncoderBlock(nn.Module):
         output = self.activation_2(output)
         if self.dropout_rate > 0.0:  # Perform dropout
             output = F.dropout(output, p=self.dropout_rate)
-        if input.shape == output.shape:
-            output = output + input
+        output = output + self.residual_mapping(input)
         # Downsampling stage
         output = self.downsampling(output)
         return output
@@ -98,37 +103,52 @@ class CoordinatesFullyConnectedBlock(nn.Module):
         self.activation_2 = Misc.get_activation(activation=activation)
         # Init normalizations
         self.normalization_1 = Misc.get_normalization_1d(normalization=normalization, channels=output_channels,
-                                                         channels_latent=303)
+                                                         channels_latent=300)
         self.normalization_2 = Misc.get_normalization_1d(normalization=normalization, channels=output_channels,
-                                                         channels_latent=303)
+                                                         channels_latent=300)
         # Init linear operations
         self.linear_1 = nn.Linear(in_features=input_channels, out_features=output_channels, bias=bias)
         self.linear_2 = nn.Linear(in_features=output_channels, out_features=output_channels, bias=bias)
+        # Init residual operation
+        if input_channels == output_channels:
+            self.residual_mapping = nn.Identity()
+        else:
+            self.residual_mapping = nn.Linear(in_features=input_channels, out_features=output_channels, bias=bias)
 
     def forward(self, input: torch.Tensor, latent_tensor: torch.Tensor = None) -> torch.Tensor:
         """
-        Forward pass of the fully connected block
+        Forward pass of the fully connected residual block
         :param input: (torch.tensor) Input coordinates with shape (batch size, channels_in)
         :return: (torch.tensor) Output tensor with shape (batch size, channels_out)
         """
         # First stage
-        output_linear_1 = self.linear_1(input)
+        # Linear layer
+        output = self.linear_1(input)
+        # Normalization
         if isinstance(self.normalization_1, CBatchNorm1d):
-            output_normalization_1 = self.normalization_1(output_linear_1, latent_tensor)
+            output = self.normalization_1(output, latent_tensor)
         else:
-            output_normalization_1 = self.normalization_1(output_linear_1)
-        output_activation_1 = self.activation_1(output_normalization_1)
-        if self.dropout_rate > 0.0:  # Perform dropout
-            output_activation_1 = F.dropout(output_activation_1, p=self.dropout_rate)
+            output = self.normalization_1(output)
+        # Activation
+        output = self.activation_1(output)
+        # Perform dropout
+        if self.dropout_rate > 0.0:
+            output = F.dropout(output, p=self.dropout_rate)
         # Second stage
-        output_linear_2 = self.linear_2(output_activation_1)
+        # Linear layer
+        output = self.linear_2(output)
+        # Normalization
         if isinstance(self.normalization_2, CBatchNorm1d):
-            output_normalization_2 = self.normalization_2(output_linear_2, latent_tensor)
+            output = self.normalization_2(output, latent_tensor)
         else:
-            output_normalization_2 = self.normalization_2(output_linear_2)
-        output = self.activation_2(output_normalization_2)
-        if input.shape == output.shape:
-            output = output + input
+            output = self.normalization_2(output)
+        # Activation
+        output = self.activation_2(output)
+        # Perform dropout
+        if self.dropout_rate > 0.0:
+            output = F.dropout(output, p=self.dropout_rate)
+        # Residual mapping
+        output = output + self.residual_mapping(input)
         return output
 
 
@@ -159,19 +179,18 @@ class CBatchNorm1d(nn.Module):
         nn.init.zeros_(self.conv_beta.bias)
 
     def forward(self, x: torch.Tensor, c: torch.Tensor) -> torch.Tensor:
-        assert (x.size(0) == c.size(0))
-        assert (c.size(1) == self.c_dim)
-
         # c is assumed to be of size batch_size x c_dim x T
         if len(c.size()) == 2:
             c = c.unsqueeze(2)
 
         # Affine mapping
-        gamma = self.conv_gamma(c)
-        beta = self.conv_beta(c)
-
+        gamma = self.conv_gamma(c)[:, :, 0]
+        beta = self.conv_beta(c)[:, :, 0]
         # Norm
         net = self.bn(x)
-        out = gamma[:, :, 0] * net + beta[:, :, 0]
+        # Repeat gamma and beta to apply factors to every coordinate
+        gamma = torch.repeat_interleave(gamma, int(net.shape[0] / gamma.shape[0]), dim=0)
+        beta = torch.repeat_interleave(beta, int(net.shape[0] / beta.shape[0]), dim=0)
+        out = gamma * net + beta
 
         return out

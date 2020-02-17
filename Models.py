@@ -22,7 +22,7 @@ class OccupancyNetwork(nn.Module):
                  activation_encoding: Union[str, List[str]] = 'prelu',
                  downsampling_encoding: Union[str, List[str]] =
                  #   ['none', 'averagepool', 'averagepool', 'averagepool', 'averagepool'],
-                 ['averagepool', 'averagepool', 'maxpool', 'maxpool', 'none'],
+                 ['averagepool', 'averagepool', 'averagepool', 'maxpool', 'none'],
                  downsampling_factor_encoding: Union[int, List[int]] = 2,
                  normalization_encoding: Union[str, List[str]] = 'batchnorm',
                  dropout_rate_encoding: Union[float, List[float]] = 0.0,
@@ -121,8 +121,8 @@ class OccupancyNetwork(nn.Module):
 
         # Init output activation
         self.output_block = nn.Sequential(
-        nn.Linear(in_features=channels_in_decoding_blocks[-1][1], out_features=1, bias=True),
-        Misc.get_activation(output_activation))
+            nn.Linear(in_features=channels_in_decoding_blocks[-1][1], out_features=1, bias=True),
+            Misc.get_activation(output_activation))
 
     def forward(self, volume: torch.tensor, coordinates: torch.tensor) -> torch.tensor:
         """
@@ -132,26 +132,19 @@ class OccupancyNetwork(nn.Module):
         :return: (torch.tensor) Output tensor
         """
         # Perform encoding path
-        # output_encoding = self.encoding(volume)
-        # # Flatten encoding output except for batch dimension
-        # output_encoding_flatten = output_encoding.view(output_encoding.shape[0],-1) # torch.flatten(output_encoding, start_dim=1)
-        # # Construct decoding input
-        # input_decoding = torch.cat((
-        #     torch.repeat_interleave(output_encoding_flatten, int(coordinates.shape[0] / volume.shape[0]), dim=0),
-        #     coordinates), dim=1)
-        # # Perform decoding path
-        # output_decoding = self.decoding(input_decoding)
-
         output_encoding = self.encoding(volume)
-        out_encoding_flatten = output_encoding.view(output_encoding.shape[0], -1)
-        input_decoding = torch.cat((torch.repeat_interleave(out_encoding_flatten,
+        # Flatten latent vector for decoding path
+        output_encoding_flatten = output_encoding.view(output_encoding.shape[0], -1)
+        # Repeat latent vector
+        input_decoding = torch.cat((torch.repeat_interleave(output_encoding_flatten,
                                                             int(coordinates.shape[0] / volume.shape[0]), dim=0),
-                                    coordinates),
-                                   dim=1)
+                                    coordinates), dim=1)
+        # Perform decoding path
         for index, block in enumerate(self.decoding):
             if index == 0:
-                output_decoding = block(input_decoding, input_decoding)
+                output_decoding = block(input_decoding, output_encoding_flatten)
             else:
-                output_decoding = block(output_decoding, input_decoding)
+                output_decoding = block(output_decoding, output_encoding_flatten)
+        # Perform last linear layer + sigmoid activation
         output = self.output_block(output_decoding)
         return output
