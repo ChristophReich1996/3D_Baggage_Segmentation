@@ -202,7 +202,7 @@ def get_normalization_1d(normalization: str, channels: int, channels_latent: int
     elif normalization == 'instancenorm':
         return nn.Sequential(nn.InstanceNorm1d(channels))
     elif normalization == 'cbatchnorm':
-        return ModelParts.CBatchNorm1d(channels_latent, channels)
+        return ModelParts.ConditionalBatchNorm1d(channels_latent, channels)
     elif normalization == 'none':
         return nn.Sequential()
     else:

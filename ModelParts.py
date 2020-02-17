@@ -125,7 +125,7 @@ class CoordinatesFullyConnectedBlock(nn.Module):
         # Linear layer
         output = self.linear_1(input)
         # Normalization
-        if isinstance(self.normalization_1, CBatchNorm1d):
+        if isinstance(self.normalization_1, ConditionalBatchNorm1d):
             output = self.normalization_1(output, latent_tensor)
         else:
             output = self.normalization_1(output)
@@ -138,7 +138,7 @@ class CoordinatesFullyConnectedBlock(nn.Module):
         # Linear layer
         output = self.linear_2(output)
         # Normalization
-        if isinstance(self.normalization_2, CBatchNorm1d):
+        if isinstance(self.normalization_2, ConditionalBatchNorm1d):
             output = self.normalization_2(output, latent_tensor)
         else:
             output = self.normalization_2(output)
@@ -152,45 +152,56 @@ class CoordinatesFullyConnectedBlock(nn.Module):
         return output
 
 
-class CBatchNorm1d(nn.Module):
+class ConditionalBatchNorm1d(nn.Module):
     """
-    Source: https://github.com/autonomousvision/occupancy_networks/blob/master/im2mesh/layers.py
+    Implementation of a conditional batch normalization module using 1D convolutions to predict gamma and beta
     """
 
-    def __init__(self, c_dim: int, f_dim: int) -> None:
+    def __init__(self, latent_channels: int, output_channels: int, kernel_size: int = 3, bias: bool = True) -> None:
         """
-        Conditional batch normalization layer class
-        :param c_dim: (int) dimension of latent conditioned code c
-        :param f_dim: (int) feature dimension
+        Conditional batch normalization module including two 1D convolutions to predict gamma end beta
+        :param latent_channels: (int) Features of the latent vector
+        :param output_channels: (int) Features of the output vector to be normalized
+        :param kernel_size: (int) Kernel size used in 1d convolution
+        :param bias: (int) True if bias should be used in 2D convolutions
         """
-        super(CBatchNorm1d, self).__init__()
-        self.c_dim = c_dim
-        self.f_dim = f_dim
-        # Submodules
-        self.conv_gamma = nn.Conv1d(c_dim, f_dim, 1)
-        self.conv_beta = nn.Conv1d(c_dim, f_dim, 1)
-        self.bn = nn.BatchNorm1d(f_dim, affine=False)
+        super(ConditionalBatchNorm1d, self).__init__()
+        # Init operations
+        self.conv_gamma = nn.Conv1d(in_channels=latent_channels, out_channels=output_channels, kernel_size=kernel_size,
+                                    bias=bias, padding=kernel_size // 2)
+        self.conv_beta = nn.Conv1d(in_channels=latent_channels, out_channels=output_channels, kernel_size=kernel_size,
+                                   bias=bias, padding=kernel_size // 2)
+        self.bn = nn.BatchNorm1d(num_features=output_channels, affine=False)  # affine=False -> gamma & beta not used
+        # Reset parameters of convolutions
         self.reset_parameters()
 
     def reset_parameters(self) -> None:
+        """
+        Method resets the parameter of the convolution to predict gamma and beta
+        """
         nn.init.zeros_(self.conv_gamma.weight)
         nn.init.zeros_(self.conv_beta.weight)
         nn.init.ones_(self.conv_gamma.bias)
         nn.init.zeros_(self.conv_beta.bias)
 
-    def forward(self, x: torch.Tensor, c: torch.Tensor) -> torch.Tensor:
-        # c is assumed to be of size batch_size x c_dim x T
-        if len(c.size()) == 2:
-            c = c.unsqueeze(2)
-
-        # Affine mapping
-        gamma = self.conv_gamma(c)[:, :, 0]
-        beta = self.conv_beta(c)[:, :, 0]
-        # Norm
-        net = self.bn(x)
+    def forward(self, input: torch.Tensor, latent_vector: torch.Tensor) -> torch.Tensor:
+        """
+        Forward pass
+        :param input: (torch.Tensor) Input tensor to be normalized of shape (batch size coordinates, features)
+        :param latent_vector: (torch.Tensor) Latent vector tensor of shape (batch_size, features)
+        :return: (torch.Tensor) Normalized tensor
+        """
+        # Add third dimension for 1d convolution if needed
+        if len(latent_vector.size()) == 2:
+            latent_vector.unsqueeze(2)
+        # Perform convolutions to estimate gamma and beta
+        gamma = self.conv_gamma(latent_vector)[:, :, 0]  # Remove last dimension
+        beta = self.conv_beta(latent_vector)[:, :, 0]  # Remove last dimension
+        # Perform normalization
+        output_normalized = self.bn(input)
         # Repeat gamma and beta to apply factors to every coordinate
-        gamma = torch.repeat_interleave(gamma, int(net.shape[0] / gamma.shape[0]), dim=0)
-        beta = torch.repeat_interleave(beta, int(net.shape[0] / beta.shape[0]), dim=0)
-        out = gamma * net + beta
-
-        return out
+        gamma = torch.repeat_interleave(gamma, int(output_normalized.shape[0] / gamma.shape[0]), dim=0)
+        beta = torch.repeat_interleave(beta, int(output_normalized.shape[0] / beta.shape[0]), dim=0)
+        # Add factors
+        output = gamma * output_normalized + beta
+        return output
