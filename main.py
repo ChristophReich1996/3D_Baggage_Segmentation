@@ -20,7 +20,7 @@ if __name__ == '__main__':
     # Print model
     print(model)
     # Print number of parameters included in the model
-    print(sum(p.numel() for p in model.parameters() if p.requires_grad))
+    print(Misc.get_number_of_network_parameters(model))
     # Init data parallel for multi GPU usage
     # model = torch.nn.DataParallel(model)
     # Init model wrapper
@@ -39,7 +39,7 @@ if __name__ == '__main__':
                                                          test_data=DataLoader(Datasets.WeaponDataset(
                                                              target_path_volume='/fastdata/Smiths_LKA_Weapons_Down/len_8/',
                                                              target_path_label='/fastdata/Smiths_LKA_Weapons_Down/len_1/',
-                                                             npoints=2 ** 17,
+                                                             npoints=2 ** 15,
                                                              side_len=8,
                                                              length=276,  # 200,
                                                              offset=2580,  # 2600,

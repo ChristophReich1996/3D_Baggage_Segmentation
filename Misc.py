@@ -359,6 +359,16 @@ def draw_test(locs, actual, volume, side_len: int, batch_index: int, draw_out_pa
                 " " + "1.0" + " " + "0.5" + " " + "0.5" + "\n")
 
 
+def get_number_of_network_parameters(network: nn.Module) -> int:
+    """
+    Method estimates the number of learnable parameters in a given network
+    :param network: (nn.Module) Network
+    :return: (int) Number of learnable parameters
+    """
+    network.train()
+    return sum(p.numel() for p in network.parameters() if p.requires_grad)
+
+
 class FilePermutation(object):
     """
     Class to shuffle data files
