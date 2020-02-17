@@ -29,7 +29,7 @@ class OccupancyNetwork(nn.Module):
                  bias_encoding: Union[bool, List[bool]] = True,
                  number_of_decoding_blocks: int = 5,  # Decoding path parameter
                  channels_in_decoding_blocks: List[Tuple[int]] =
-                 [(300 + 3, 128), (128, 128), (128, 128), (128, 128), (128, 32)],
+                 [(300 + 3, 128), (128, 128), (128, 128), (128, 128), (128, 128)],
                  #  [(180 + 3, 256), (256, 256), (256, 256), (256, 256), (256, 256), (256, 1)],
                  activation_decoding: Union[str, List[str]] = 'selu',
                  normalization_decoding: Union[str, List[str]] = 'cbatchnorm',
@@ -142,9 +142,9 @@ class OccupancyNetwork(nn.Module):
         # Perform decoding path
         for index, block in enumerate(self.decoding):
             if index == 0:
-                output_decoding = block(input_decoding, output_encoding_flatten)
+                output_decoding = block(input_decoding, output_encoding_flatten.clone())
             else:
-                output_decoding = block(output_decoding, output_encoding_flatten)
+                output_decoding = block(output_decoding, output_encoding_flatten.clone())
         # Perform last linear layer + sigmoid activation
         output = self.output_block(output_decoding)
         return output

@@ -14,9 +14,9 @@ import Misc
 
 if __name__ == '__main__':
     # Batch size has to be a factor of the number of devices used in data parallel
-    os.environ["CUDA_VISIBLE_DEVICES"] = '2'  # "0, 1, 3, 4, 5"
+    os.environ["CUDA_VISIBLE_DEVICES"] = '1, 2'  # "0, 1, 3, 4, 5"
     # Init model
-    model = Models.OccupancyNetwork().cuda()  # torch.load('occupancy_network_cuda_10_02.pt').module
+    model = torch.nn.DataParallel(Models.OccupancyNetwork().cuda())  # torch.load('occupancy_network_cuda_10_02.pt').module
     # Print model
     print(model)
     # Print number of parameters included in the model
@@ -33,9 +33,9 @@ if __name__ == '__main__':
                                                              npoints=2 ** 14,
                                                              side_len=8,
                                                              length=2600),
-                                                             batch_size=16, shuffle=True,
+                                                             batch_size=32, shuffle=True,
                                                              collate_fn=Misc.many_to_one_collate_fn_sample,
-                                                             num_workers=16, pin_memory=True),
+                                                             num_workers=32, pin_memory=True),
                                                          test_data=DataLoader(Datasets.WeaponDataset(
                                                              target_path_volume='/fastdata/Smiths_LKA_Weapons_Down/len_8/',
                                                              target_path_label='/fastdata/Smiths_LKA_Weapons_Down/len_1/',
