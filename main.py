@@ -54,7 +54,7 @@ if __name__ == '__main__':
                                                              target_path_label='/fastdata/Smiths_LKA_Weapons_Down/len_1/',
                                                              npoints=2 ** 14,
                                                              side_len=8,
-                                                             length=50,  # 200,
+                                                             length=36,  # 200,
                                                              offset=2906,  # 2600,
                                                              test=True,
                                                              share_box=0.0,

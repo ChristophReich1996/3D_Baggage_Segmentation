@@ -655,7 +655,6 @@ class FilePermutation(object):
         for file_name in file_names:
             if ending in file_name:
                 permutation.append(file_name[:-len(ending)])
-
         self.permute = permutation
 
     def __getitem__(self, index: int):
