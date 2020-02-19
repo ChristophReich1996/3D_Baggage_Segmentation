@@ -11,7 +11,7 @@ import Misc
 class WeaponDataset(data.Dataset):
     def __init__(self, target_path_volume: str, target_path_label: str, length: int, dim_max: int = 640,
                  npoints: int = 2 ** 10, side_len: int = 32,
-                 sampling: str = 'one', offset: int = 0, test: bool = False, share_box: float = 0.4) -> None:
+                 sampling: str = 'one', offset: int = 0, test: bool = False, share_box: float = 0.6) -> None:
         """
         Constructor method
         :param target_path_volume: (str)

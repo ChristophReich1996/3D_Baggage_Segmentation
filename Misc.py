@@ -8,7 +8,6 @@ from pykdtree.kdtree import KDTree
 
 import ModelParts
 
-
 def intersection_over_union_bounding_box(prediction: torch.tensor, coordinates: torch.tensor, label: torch.tensor,
                                          threshold: float = 0.5,
                                          offset: torch.tensor = torch.tensor([0.0, 0.0, 0.0])) -> torch.tensor:
@@ -170,7 +169,7 @@ def get_activation(activation: str) -> nn.Sequential:
         raise RuntimeError('Activation {} is not available!'.format(activation))
 
 
-def get_normalization_3d(normalization: str, channels: int) -> nn.Sequential:
+def get_normalization_3d(normalization: str, channels: int, affine: bool = True) -> nn.Sequential:
     """
     Method to return different types of 3D normalization operations
     :param normalization: (str) Type of normalization ('batchnorm', 'instancenorm')
@@ -180,14 +179,14 @@ def get_normalization_3d(normalization: str, channels: int) -> nn.Sequential:
     assert normalization in ['batchnorm', 'instancenorm'], \
         'Normalization {} is not available!'.format(normalization)
     if normalization == 'batchnorm':
-        return nn.Sequential(nn.BatchNorm3d(channels))
+        return nn.Sequential(nn.BatchNorm3d(channels, affine=affine))
     elif normalization == 'instancenorm':
-        return nn.Sequential(nn.InstanceNorm3d(channels))
+        return nn.Sequential(nn.InstanceNorm3d(channels, affine=affine))
     else:
         raise RuntimeError('Normalization {} is not available!'.format(normalization))
 
 
-def get_normalization_1d(normalization: str, channels: int, channels_latent: int = None) -> Union[
+def get_normalization_1d(normalization: str, channels: int, channels_latent: int = None, affine: bool = True) -> Union[
     nn.Sequential, nn.Module]:
     """
     Method to return different types of 1D normalization operations
@@ -198,9 +197,9 @@ def get_normalization_1d(normalization: str, channels: int, channels_latent: int
     assert normalization in ['batchnorm', 'instancenorm', 'cbatchnorm', 'none'], \
         'Normalization {} is not available!'.format(normalization)
     if normalization == 'batchnorm':
-        return nn.Sequential(nn.BatchNorm1d(channels))
+        return nn.Sequential(nn.BatchNorm1d(channels, affine=affine))
     elif normalization == 'instancenorm':
-        return nn.Sequential(nn.InstanceNorm1d(channels))
+        return nn.Sequential(ModelParts.InstanceNorm1d())
     elif normalization == 'cbatchnorm':
         return ModelParts.ConditionalBatchNorm1d(channels_latent, channels)
     elif normalization == 'none':

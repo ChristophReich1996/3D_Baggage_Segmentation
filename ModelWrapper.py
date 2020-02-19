@@ -107,7 +107,7 @@ class OccupancyNetworkWrapper(object):
         # Calc no grads
         with torch.no_grad():
             # Get data
-            for volume, coordinates, labels, actual in self.test_data:
+            for volume, coordinates, labels, actual in self.validation_data:
                 # Add batch size dim to data and to device
                 volume = volume.to(self.device)
                 coordinates = coordinates.to(self.device)

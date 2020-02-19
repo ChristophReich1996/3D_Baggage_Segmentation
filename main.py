@@ -14,9 +14,9 @@ import Misc
 
 if __name__ == '__main__':
     # Batch size has to be a factor of the number of devices used in data parallel
-    os.environ["CUDA_VISIBLE_DEVICES"] = '0, 1, 2'  # "0, 1, 3, 4, 5"
+    os.environ["CUDA_VISIBLE_DEVICES"] = '0, 1, 3, 4, 5'  # "0, 1, 3, 4, 5"
     # Init model
-    model = torch.nn.DataParallel(Models.OccupancyNetwork().cuda())
+    model = torch.nn.DataParallel(Models.OccupancyNetworkNoCat().cuda())  # Models.OccupancyNetwork().cuda()
     # Print model
     print(model)
     # Print number of parameters included in the model
@@ -32,19 +32,19 @@ if __name__ == '__main__':
                                                              target_path_label='/fastdata/Smiths_LKA_Weapons_Down/len_1/',
                                                              npoints=2 ** 14,
                                                              side_len=8,
-                                                             length=2580),
-                                                             batch_size=30, shuffle=True,
+                                                             length=2600),
+                                                             batch_size=25, shuffle=True,
                                                              collate_fn=Misc.many_to_one_collate_fn_sample,
-                                                             num_workers=30, pin_memory=True),
+                                                             num_workers=25, pin_memory=True),
                                                          test_data=DataLoader(Datasets.WeaponDataset(
                                                              target_path_volume='/fastdata/Smiths_LKA_Weapons_Down/len_8/',
                                                              target_path_label='/fastdata/Smiths_LKA_Weapons_Down/len_1/',
-                                                             npoints=2 ** 15,
+                                                             npoints=2 ** 17,
                                                              side_len=8,
-                                                             length=276,  # 200,
-                                                             offset=2580,  # 2600,
+                                                             length=306,  # 200,
+                                                             offset=2600,  # 2600,
                                                              test=True,
-                                                             share_box=0),
+                                                             share_box=0.0),
                                                              batch_size=1, shuffle=True,
                                                              collate_fn=Misc.many_to_one_collate_fn_sample_down,
                                                              num_workers=1, pin_memory=True,
@@ -52,12 +52,13 @@ if __name__ == '__main__':
                                                          validation_data=DataLoader(Datasets.WeaponDataset(
                                                              target_path_volume='/fastdata/Smiths_LKA_Weapons_Down/len_8/',
                                                              target_path_label='/fastdata/Smiths_LKA_Weapons_Down/len_1/',
-                                                             npoints=2 ** 17,
+                                                             npoints=2 ** 14,
                                                              side_len=8,
-                                                             length=100,  # 200,
-                                                             offset=2856,  # 2600,
+                                                             length=50,  # 200,
+                                                             offset=2906,  # 2600,
                                                              test=True,
-                                                             share_box=0),
+                                                             share_box=0.0,
+                                                             sampling='one_fast'),
                                                              batch_size=1, shuffle=True,
                                                              collate_fn=Misc.many_to_one_collate_fn_sample_down,
                                                              num_workers=1, pin_memory=True,
@@ -65,7 +66,7 @@ if __name__ == '__main__':
                                                          loss_function=torch.nn.BCELoss(reduction='mean'),
                                                          device='cuda')
 
-    model_wrapper.train(epochs=100, model_save_path='/visinf/home/vilab15/Projects/3D_baggage_segmentation/')
+    model_wrapper.train(epochs=200, model_save_path='/visinf/home/vilab15/Projects/3D_baggage_segmentation/')
     model_wrapper.test(threshold=0.5, offset=torch.tensor([0.0, 0.0, 0.0]))  # Best offset=10 threshold=0.8
 
     # model = torch.load('/visinf/home/vilab16/3D_baggage_segmentation/' + 'occupancy_network_lo_lo_dice_cuda.pt').module

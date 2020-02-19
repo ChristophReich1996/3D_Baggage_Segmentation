@@ -154,27 +154,24 @@ class CoordinatesFullyConnectedBlock(nn.Module):
 
 class ConditionalBatchNorm1d(nn.Module):
     """
-    Implementation of a conditional batch normalization module using 1D convolutions to predict gamma and beta
+    Implementation of a conditional batch normalization module using linear operation to predict gamma and beta
     """
 
-    def __init__(self, latent_channels: int, output_channels: int, kernel_size: int = 1, bias: bool = True) -> None:
+    def __init__(self, latent_channels: int, output_channels: int, bias: bool = True,
+                 normalization: str = 'instancenorm') -> None:
         """
         Conditional batch normalization module including two 1D convolutions to predict gamma end beta
         :param latent_channels: (int) Features of the latent vector
         :param output_channels: (int) Features of the output vector to be normalized
-        :param kernel_size: (int) Kernel size used in 1d convolution
-        :param bias: (int) True if bias should be used in 2D convolutions
+        :param bias: (int) True if bias should be used in linear layer
+        :param normalization: (str) Type of normalization to normalize feature tensor before using gamma and  beta
         """
         super(ConditionalBatchNorm1d, self).__init__()
         # Init operations
-        self.convolution_gamma = nn.Conv1d(in_channels=latent_channels, out_channels=output_channels,
-                                           kernel_size=kernel_size,
-                                           bias=bias, padding=kernel_size // 2)
-        self.convolution_beta = nn.Conv1d(in_channels=latent_channels, out_channels=output_channels,
-                                          kernel_size=kernel_size,
-                                          bias=bias, padding=kernel_size // 2)
-        self.normalization = nn.BatchNorm1d(num_features=output_channels,
-                                            affine=False)  # affine=False -> gamma & beta not used
+        self.linear_gamma = nn.Linear(in_features=latent_channels, out_features=output_channels, bias=bias)
+        self.linear_beta = nn.Linear(in_features=latent_channels, out_features=output_channels, bias=bias)
+        self.normalization = Misc.get_normalization_1d(normalization=normalization, channels=output_channels,
+                                                       affine=False)  # affine=False -> gamma & beta not used
         # Reset parameters of convolutions
         self.reset_parameters()
 
@@ -182,10 +179,10 @@ class ConditionalBatchNorm1d(nn.Module):
         """
         Method resets the parameter of the convolution to predict gamma and beta
         """
-        nn.init.zeros_(self.convolution_gamma.weight)
-        nn.init.zeros_(self.convolution_beta.weight)
-        nn.init.ones_(self.convolution_gamma.bias)
-        nn.init.zeros_(self.convolution_beta.bias)
+        nn.init.zeros_(self.linear_gamma.weight)
+        nn.init.zeros_(self.linear_beta.weight)
+        nn.init.ones_(self.linear_gamma.bias)
+        nn.init.zeros_(self.linear_beta.bias)
 
     def forward(self, input: torch.Tensor, latent_vector: torch.Tensor) -> torch.Tensor:
         """
@@ -194,12 +191,9 @@ class ConditionalBatchNorm1d(nn.Module):
         :param latent_vector: (torch.Tensor) Latent vector tensor of shape (batch_size, features)
         :return: (torch.Tensor) Normalized tensor
         """
-        # Add third dimension for 1d convolution if needed
-        if len(latent_vector.size()) == 2:
-            latent_vector.unsqueeze_(2)
         # Perform convolutions to estimate gamma and beta
-        gamma = self.convolution_gamma(latent_vector)[:, :, 0]  # Remove last dimension
-        beta = self.convolution_beta(latent_vector)[:, :, 0]  # Remove last dimension
+        gamma = self.linear_gamma(latent_vector)
+        beta = self.linear_beta(latent_vector)
         # Perform normalization
         output_normalized = self.normalization(input)
         # Repeat gamma and beta to apply factors to every coordinate
@@ -208,3 +202,16 @@ class ConditionalBatchNorm1d(nn.Module):
         # Add factors
         output = gamma * output_normalized + beta
         return output
+
+
+class InstanceNorm1d(nn.Module):
+    """
+    Implementation of instance normalization for a 2D tensor of shape (batch size, features)
+    """
+
+    def __init__(self) -> None:
+        # Call super constructor
+        super(InstanceNorm1d, self).__init__()
+
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
+        return (input - input.mean(dim=1, keepdim=True)) / input.std(dim=1, keepdim=True)
