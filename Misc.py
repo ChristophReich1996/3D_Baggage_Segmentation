@@ -271,7 +271,7 @@ def many_to_one_collate_fn_sample_down(batch):
     return volumes, coords, labels, low_volumes
 
 
-def draw_test(locs, actual, volume, side_len: int, batch_index: int, draw_out_path: str = 'obj'):
+def draw_test(locs, actual, volume, side_len: int, batch_index: int, draw_out_path: str = 'obj') -> None:
     draw_out_path = os.path.join(os.getcwd(), draw_out_path)
     if not os.path.exists(draw_out_path):
         os.mkdir(draw_out_path)

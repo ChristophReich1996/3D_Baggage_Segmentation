@@ -6,9 +6,9 @@ import torch.nn as nn
 from tqdm import tqdm
 from torch.utils.data.dataloader import DataLoader
 from datetime import datetime
-from pykdtree.kdtree import KDTree
-from torchsummary import summary
 import Misc
+import os
+import json
 
 
 class OccupancyNetworkWrapper(object):
@@ -20,7 +20,8 @@ class OccupancyNetworkWrapper(object):
                  training_data: torch.utils.data.dataloader,
                  test_data: torch.utils.data.dataloader,
                  validation_data: torch.utils.data.dataloader,
-                 loss_function: Callable[[torch.tensor, torch.tensor], torch.tensor], device: str = 'cuda') -> None:
+                 loss_function: Callable[[torch.tensor, torch.tensor], torch.tensor], device: str = 'cuda',
+                 save_data_path:str = 'Saved_data') -> None:
         """
         Class constructor
         :param occupancy_network: (nn.Module) Occupancy network for binary segmentation
@@ -40,8 +41,24 @@ class OccupancyNetworkWrapper(object):
         self.loss_function = loss_function
         self.device = device
         self.metrics = dict()
+        # Init folder to save models and logs
+        time_and_date = str(datetime.datetime.now())
+        self.path_save_plots = os.path.join(save_data_path, 'plots_' + time_and_date)
+        if not os.path.exists(self.path_save_plots):
+            os.makedirs(self.path_save_plots)
+        self.path_save_metrics = os.path.join(save_data_path, 'metrics_' + time_and_date)
+        if not os.path.exists(self.path_save_metrics):
+            os.makedirs(self.path_save_metrics)
+        # Save hyperparameters
+        hyperparameter = dict()
+        hyperparameter['model'] = str(self.occupancy_network)
+        hyperparameter['optim'] = str(occupancy_network_optimizer)
+        hyperparameter['loss'] = str(loss_function)
+        # Save to file
+        with open(os.path.join(self.path_save_metric, 'hyperparameter.txt'), 'w') as json_file:
+            json.dump(self.hyperparameter, json_file)
 
-    def train(self, epochs: int = 100, save_best_model: bool = True, model_save_path: str = '') -> None:
+    def train(self, epochs: int = 100, save_best_model: bool = True) -> None:
         """
         Training loop
         :param epochs: (int) Number of epochs to perform
@@ -91,12 +108,13 @@ class OccupancyNetworkWrapper(object):
             # Save best model
             if save_best_model and (best_loss > validation_loss):
                 torch.save(self.occupancy_network,
-                           model_save_path + 'occupancy_network_' + self.device + '.pt')
+                           self.path_save_models + 'occupancy_network_' + self.device + '.pt')
                 best_loss = validation_loss
-            self.save_metrics(self.metrics, path=model_save_path)
+            self.save_metrics(self.metrics, path=self.path_save_metrics)
         progress_bar.close()
 
-    def validate(self, threshold: float = 0.5) -> Tuple[float, float, float]:
+    def validate(self, threshold: float = 0.5, offset: torch.Tensor = torch.tensor([10.0, 10.0, 10.0])) -> Tuple[
+        float, float, float]:
         # Model into eval mode
         self.occupancy_network.eval()
         # Init list to save loss, iou, bb iou
@@ -126,11 +144,11 @@ class OccupancyNetworkWrapper(object):
                 # Calc bb iou
                 bb_iou_values.append(
                     Misc.intersection_over_union_bounding_box(prediction, coordinates, actual[0],
-                                                              threshold=threshold)[0].item())
+                                                              threshold=threshold, offset=offset)[0].item())
         return float(np.mean(loss_values)), float(np.mean(iou_values)), float(np.mean(bb_iou_values))
 
     def test(self, draw: bool = True, side_len: int = 1, threshold: float = 0.5,
-             offset: torch.tensor = torch.tensor([5.0, 5.0, 5.0])) -> Tuple[float, float, float, float]:
+             offset: torch.tensor = torch.tensor([10.0, 10.0, 10.0])) -> Tuple[float, float, float, float]:
         # Init progress bar
         progress_bar = tqdm(total=len(self.test_data))
         # Get downsampling factor for input and calculate usampling factor
@@ -200,6 +218,8 @@ class OccupancyNetworkWrapper(object):
 
             # Close progress bar
             progress_bar.close()
+        # Save metrics
+        self.save_metrics(self.metrics, path=self.path_save_metrics)
         # Get average metrics
         test_iou = self.get_average_metric('iou')
         test_iou_bounding_box = self.get_average_metric('iou_bounding_box')

@@ -103,9 +103,9 @@ class CoordinatesFullyConnectedBlock(nn.Module):
         self.activation_2 = Misc.get_activation(activation=activation)
         # Init normalizations
         self.normalization_1 = Misc.get_normalization_1d(normalization=normalization, channels=output_channels,
-                                                         channels_latent=300)
+                                                         channels_latent=480)
         self.normalization_2 = Misc.get_normalization_1d(normalization=normalization, channels=output_channels,
-                                                         channels_latent=300)
+                                                         channels_latent=480)
         # Init linear operations
         self.linear_1 = nn.Linear(in_features=input_channels, out_features=output_channels, bias=bias)
         self.linear_2 = nn.Linear(in_features=output_channels, out_features=output_channels, bias=bias)
@@ -158,7 +158,7 @@ class ConditionalBatchNorm1d(nn.Module):
     """
 
     def __init__(self, latent_channels: int, output_channels: int, bias: bool = True,
-                 normalization: str = 'instancenorm') -> None:
+                 normalization: str = 'batchnorm') -> None:
         """
         Conditional batch normalization module including two 1D convolutions to predict gamma end beta
         :param latent_channels: (int) Features of the latent vector

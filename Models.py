@@ -14,12 +14,12 @@ class OccupancyNetwork(nn.Module):
 
     def __init__(self, number_of_encoding_blocks: int = 5,  # 5,  # Encoding path parameters
                  channels_in_encoding_blocks: List[Tuple[int]] =
-                 [(1, 64), (64, 64), (64, 64), (64, 64), (64, 5)],
+                 [(1, 128), (128, 128), (128, 128), (128, 128), (128, 8)],
                  #   [(1, 32), (32, 64), (64, 128),(128, 64), (64, 32), (32, 3)],
                  #   [(1, 64), (64, 128), (128, 256),(256, 128), (128, 64), (64, 3)],
                  kernel_size_encoding: Union[int, List[int]] = 3, stride_encoding: Union[int, List[int]] = 1,
                  padding_encoding: Union[int, List[int]] = 1,
-                 activation_encoding: Union[str, List[str]] = 'selu',
+                 activation_encoding: Union[str, List[str]] = 'leaky relu',
                  downsampling_encoding: Union[str, List[str]] =
                  #   ['none', 'averagepool', 'averagepool', 'averagepool', 'averagepool'],
                  ['averagepool', 'averagepool', 'averagepool', 'averagepool', 'none'],
@@ -29,9 +29,9 @@ class OccupancyNetwork(nn.Module):
                  bias_encoding: Union[bool, List[bool]] = False,
                  number_of_decoding_blocks: int = 5,  # Decoding path parameter
                  channels_in_decoding_blocks: List[Tuple[int]] =
-                 [(300 + 3, 256), (256, 256), (256, 256), (256, 256), (256, 256)],
+                 [(480 + 3, 128), (128, 128), (128, 128), (128, 128), (128, 128)],
                  #  [(180 + 3, 256), (256, 256), (256, 256), (256, 256), (256, 256), (256, 1)],
-                 activation_decoding: Union[str, List[str]] = 'selu',
+                 activation_decoding: Union[str, List[str]] = 'leaky relu',
                  normalization_decoding: Union[str, List[str]] = 'cbatchnorm',
                  dropout_rate_decoding: Union[float, List[float]] = [0.0, 0.0, 0.0, 0.0, 0.0],
                  bias_decoding: Union[bool, List[bool]] = True,
@@ -165,7 +165,7 @@ class OccupancyNetworkNoCat(nn.Module):
 
     def __init__(self, number_of_encoding_blocks: int = 5,  # 5,  # Encoding path parameters
                  channels_in_encoding_blocks: List[Tuple[int]] =
-                 [(1, 64), (64, 64), (64, 64), (64, 64), (64, 5)],
+                 [(1, 64), (64, 64), (64, 64), (64, 64), (64, 8)],
                  #   [(1, 32), (32, 64), (64, 128),(128, 64), (64, 32), (32, 3)],
                  #   [(1, 64), (64, 128), (128, 256),(256, 128), (128, 64), (64, 3)],
                  kernel_size_encoding: Union[int, List[int]] = 3, stride_encoding: Union[int, List[int]] = 1,
@@ -180,9 +180,9 @@ class OccupancyNetworkNoCat(nn.Module):
                  bias_encoding: Union[bool, List[bool]] = False,
                  number_of_decoding_blocks: int = 5,  # Decoding path parameter
                  channels_in_decoding_blocks: List[Tuple[int]] =
-                 [(3, 256), (256, 256), (256, 256), (256, 256), (256, 256)],
+                 [(3, 128), (128, 128), (128, 128), (128, 128), (128, 128)],
                  #  [(180 + 3, 256), (256, 256), (256, 256), (256, 256), (256, 256), (256, 1)],
-                 activation_decoding: Union[str, List[str]] = 'selu',
+                 activation_decoding: Union[str, List[str]] = 'leaky relu',
                  normalization_decoding: Union[str, List[str]] = 'cbatchnorm',
                  dropout_rate_decoding: Union[float, List[float]] = [0.0, 0.0, 0.0, 0.0, 0.0],
                  bias_decoding: Union[bool, List[bool]] = True,
