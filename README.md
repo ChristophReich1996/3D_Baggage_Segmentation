@@ -28,7 +28,7 @@ Argument | Default value | Info
 `--batch_size` | 10 | Batch size to be utilized
 `--lr` | 1e-04 | Learning rate to use
 `--gpus_to_use` | '0' | Indexes of the GPUs to be use
-`--use_data_parallel` | 0 (False) | Use multiple GPUs (Num of GPUs must be a factor of batch size)
+`--use_data_parallel` | 0 (False) | Use multiple GPUs (num of GPUs must be a factor of the batch size)
 `--epochs` | 100 | Epochs to perform while training
 `--use_cat` | 1 (True) | One if concatenation should be utilized
 `--use_cbn` | 1 (True) | One if conditional BN should be utilized else normal BN is used
