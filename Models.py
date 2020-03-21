@@ -163,7 +163,7 @@ class OccupancyNetworkNoCat(nn.Module):
     """
 
     def __init__(self, number_of_encoding_blocks: int = 5,  # 5,  # Encoding path parameters
-                 channels_in_encoding_blocks: List[Tuple[int]] =
+                 channels_in_encoding_blocks: List[Tuple[int, int]] =
                  [(1, 64), (64, 64), (64, 64), (64, 64), (64, 8)],
                  #   [(1, 32), (32, 64), (64, 128),(128, 64), (64, 32), (32, 3)],
                  #   [(1, 64), (64, 128), (128, 256),(256, 128), (128, 64), (64, 3)],
@@ -178,7 +178,7 @@ class OccupancyNetworkNoCat(nn.Module):
                  dropout_rate_encoding: Union[float, List[float]] = 0.0,
                  bias_encoding: Union[bool, List[bool]] = False,
                  number_of_decoding_blocks: int = 5,  # Decoding path parameter
-                 channels_in_decoding_blocks: List[Tuple[int]] =
+                 channels_in_decoding_blocks: List[Tuple[int, int]] =
                  [(3, 128), (128, 128), (128, 128), (128, 128), (128, 128)],
                  #  [(180 + 3, 256), (256, 256), (256, 256), (256, 256), (256, 256), (256, 1)],
                  activation_decoding: Union[str, List[str]] = 'leaky relu',
