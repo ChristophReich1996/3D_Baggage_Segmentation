@@ -39,7 +39,7 @@ class DiceLoss(nn.Module):
 
 class FocalLoss(nn.Module):
     '''
-    Implementation of the focal loss proposed in:
+    Implementation of the binary focal loss proposed in:
     https://arxiv.org/abs/1708.02002
     '''
 
@@ -68,7 +68,7 @@ class FocalLoss(nn.Module):
         # Calc binary cross entropy loss
         cross_entropy_loss = F.binary_cross_entropy(prediction, label, reduction='none')
         # Calc focal loss
-        focal_loss = self.alpha * (1 - prediction) ** self.gamma * cross_entropy_loss
+        focal_loss = self.alpha * (1.0 - prediction) ** self.gamma * cross_entropy_loss
         # Reduce loss
         if self.reduce == 'mean':
             focal_loss = torch.mean(focal_loss)
@@ -78,8 +78,10 @@ class FocalLoss(nn.Module):
 
 
 if __name__ == '__main__':
-    loss_function = FocalLoss()
-    prediction = F.softmax(torch.randn([2, 2, 256, 256]), dim=1).cuda()
-    label = torch.cat([torch.ones([2, 1, 256, 256]), torch.zeros([2, 1, 256, 256])], dim=1).cuda()
-    loss = loss_function(prediction, label)
+    dice_loss = DiceLoss()
+    # input = torch.cat([torch.ones(1, 1, 256, 256), torch.zeros(1, 1, 256, 256)], dim=1) # torch.softmax(torch.randn([1, 2, 256, 256]), dim=1)
+    # label = torch.cat([torch.ones(1, 1, 256, 256), torch.zeros(1, 1, 256, 256)], dim=1)
+    input = torch.ones([1, 1000])
+    label = torch.zeros([1, 1000])
+    loss = dice_loss(input, label)
     print(loss)

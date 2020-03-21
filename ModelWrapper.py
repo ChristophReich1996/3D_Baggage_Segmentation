@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 from tqdm import tqdm
 from torch.utils.data.dataloader import DataLoader
-from datetime import datetime
+import datetime
 import Misc
 import os
 import json
@@ -21,7 +21,7 @@ class OccupancyNetworkWrapper(object):
                  test_data: torch.utils.data.dataloader,
                  validation_data: torch.utils.data.dataloader,
                  loss_function: Callable[[torch.tensor, torch.tensor], torch.tensor], device: str = 'cuda',
-                 save_data_path:str = 'Saved_data') -> None:
+                 save_data_path: str = 'Saved_data') -> None:
         """
         Class constructor
         :param occupancy_network: (nn.Module) Occupancy network for binary segmentation
@@ -43,6 +43,9 @@ class OccupancyNetworkWrapper(object):
         self.metrics = dict()
         # Init folder to save models and logs
         time_and_date = str(datetime.datetime.now())
+        self.path_save_models = os.path.join(save_data_path, 'models_' + time_and_date)
+        if not os.path.exists(self.path_save_models):
+            os.makedirs(self.path_save_models)
         self.path_save_plots = os.path.join(save_data_path, 'plots_' + time_and_date)
         if not os.path.exists(self.path_save_plots):
             os.makedirs(self.path_save_plots)
@@ -55,8 +58,8 @@ class OccupancyNetworkWrapper(object):
         hyperparameter['optim'] = str(occupancy_network_optimizer)
         hyperparameter['loss'] = str(loss_function)
         # Save to file
-        with open(os.path.join(self.path_save_metric, 'hyperparameter.txt'), 'w') as json_file:
-            json.dump(self.hyperparameter, json_file)
+        with open(os.path.join(self.path_save_metrics, 'hyperparameter.txt'), 'w') as json_file:
+            json.dump(hyperparameter, json_file)
 
     def train(self, epochs: int = 100, save_best_model: bool = True) -> None:
         """
@@ -183,7 +186,8 @@ class OccupancyNetworkWrapper(object):
                 actual_ = actual.reshape(-1, 3)
                 # Draw weapon prediction
                 if draw:
-                    Misc.draw_test(weapon_prediction, actual_, volume, side_len, index)
+                    Misc.draw_test(weapon_prediction, actual_, volume, side_len, index,
+                                   draw_out_path=self.path_save_metrics)
                 # Calc intersection over union
                 iou = Misc.intersection_over_union(prediction, coordinates, actual[0], threshold=threshold)
                 self.logging('iou', iou.item())
