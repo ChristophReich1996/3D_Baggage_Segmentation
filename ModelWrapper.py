@@ -21,7 +21,7 @@ class OccupancyNetworkWrapper(object):
                  test_data: torch.utils.data.dataloader,
                  validation_data: torch.utils.data.dataloader,
                  loss_function: Callable[[torch.tensor, torch.tensor], torch.tensor], device: str = 'cuda',
-                 save_data_path: str = 'Saved_data') -> None:
+                 save_data_path: str = 'Saved_data', data_folder:str=None) -> None:
         """
         Class constructor
         :param occupancy_network: (nn.Module) Occupancy network for binary segmentation
@@ -31,6 +31,7 @@ class OccupancyNetworkWrapper(object):
         :param test_data: (torch.utils.data.dataloader) Dataloader including the test dataset
         :param loss_function: (Callable[[torch.tensor], torch.tensor]) Loss function to use
         :param device: (str) Device to use while training, validation and testing
+        :param data_folder: (str) Folder name inside the main save path
         """
         # Init class variables
         self.occupancy_network = occupancy_network.to(device)
@@ -42,14 +43,17 @@ class OccupancyNetworkWrapper(object):
         self.device = device
         self.metrics = dict()
         # Init folder to save models and logs
-        time_and_date = str(datetime.datetime.now())
-        self.path_save_models = os.path.join(save_data_path, 'models_' + time_and_date)
+        if data_folder is None:
+            data_folder = str(datetime.datetime.now())
+        else:
+            data_folder = data_folder + '_' + str(datetime.datetime.now())
+        self.path_save_models = os.path.join(save_data_path, 'models_' + data_folder)
         if not os.path.exists(self.path_save_models):
             os.makedirs(self.path_save_models)
-        self.path_save_plots = os.path.join(save_data_path, 'plots_' + time_and_date)
+        self.path_save_plots = os.path.join(save_data_path, 'plots_' + data_folder)
         if not os.path.exists(self.path_save_plots):
             os.makedirs(self.path_save_plots)
-        self.path_save_metrics = os.path.join(save_data_path, 'metrics_' + time_and_date)
+        self.path_save_metrics = os.path.join(save_data_path, 'metrics_' + data_folder)
         if not os.path.exists(self.path_save_metrics):
             os.makedirs(self.path_save_metrics)
         # Save hyperparameters
@@ -61,7 +65,7 @@ class OccupancyNetworkWrapper(object):
         with open(os.path.join(self.path_save_metrics, 'hyperparameter.txt'), 'w') as json_file:
             json.dump(hyperparameter, json_file)
 
-    def train(self, epochs: int = 100, save_best_model: bool = True) -> None:
+    def train(self, epochs: int = 100, save_best_model: bool = True, save_model_every_n_epoch: int = 100) -> None:
         """
         Training loop
         :param epochs: (int) Number of epochs to perform
@@ -111,8 +115,13 @@ class OccupancyNetworkWrapper(object):
             # Save best model
             if save_best_model and (best_loss > validation_loss):
                 torch.save(self.occupancy_network,
-                           self.path_save_models + 'occupancy_network_' + self.device + '.pt')
+                           os.path.join(self.path_save_models, 'occupancy_network_best_' + self.device + '.pt'))
                 best_loss = validation_loss
+            # Save model
+            if epoch % save_model_every_n_epoch == 0:
+                torch.save(self.occupancy_network,
+                           os.path.join(self.path_save_models,
+                                        'occupancy_network_best_' + str(epoch) + '_' + self.device + '.pt'))
             self.save_metrics(self.metrics, path=self.path_save_metrics)
         progress_bar.close()
 
@@ -215,7 +224,6 @@ class OccupancyNetworkWrapper(object):
                 size_volume = Misc.get_tensor_size_mb(volume) * upsample_factor
                 size_prediction = Misc.get_tensor_size_mb(prediction)
                 size_actual = Misc.get_tensor_size_mb(actual)
-                # TODO: replace with bounding box tensor
                 self.logging('size_volume', size_volume)
                 self.logging('size_prediction', size_prediction)
                 self.logging('size_actual', size_actual)

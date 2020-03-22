@@ -80,6 +80,8 @@ if __name__ == '__main__':
         loss_function = Lossfunctions.FocalLoss(reduce='mean')
     else:
         loss_function = Lossfunctions.DiceLoss()
+    # Construct folder name to save logs
+    folder_name = 'cat_' + str(args.use_cat) + '_cbn_' + str(args.use_cbn) + '_encoder_' + str(args.small_encoder)
     # Init model wrapper
     model_wrapper = OccupancyNetworkWrapper(occupancy_network=model,
                                             occupancy_network_optimizer=torch.optim.Adam(
@@ -120,7 +122,8 @@ if __name__ == '__main__':
                                                 num_workers=1, pin_memory=True,
                                             ),
                                             loss_function=loss_function,
-                                            device='cuda')
+                                            device='cuda',
+                                            data_folder=folder_name)
 
     if bool(args.train):
         model_wrapper.train(epochs=args.epochs)
