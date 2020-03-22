@@ -21,7 +21,7 @@ class OccupancyNetworkWrapper(object):
                  test_data: torch.utils.data.dataloader,
                  validation_data: torch.utils.data.dataloader,
                  loss_function: Callable[[torch.tensor, torch.tensor], torch.tensor], device: str = 'cuda',
-                 save_data_path: str = 'Saved_data', data_folder:str=None) -> None:
+                 save_data_path: str = 'Saved_data', data_folder: str = None) -> None:
         """
         Class constructor
         :param occupancy_network: (nn.Module) Occupancy network for binary segmentation
@@ -127,6 +127,12 @@ class OccupancyNetworkWrapper(object):
 
     def validate(self, threshold: float = 0.5, offset: torch.Tensor = torch.tensor([10.0, 10.0, 10.0])) -> Tuple[
         float, float, float]:
+        '''
+        Validation method
+        :param threshold: (bool) Threshold utilized to calc metrics
+        :param offset: (torch.Tensor) Offset used for bounding box prediction
+        :return: (Tuple[float, float, float]) Validation metrics: loss, iou & bounding box iou
+        '''
         # Model into eval mode
         self.occupancy_network.eval()
         # Init list to save loss, iou, bb iou
@@ -160,7 +166,15 @@ class OccupancyNetworkWrapper(object):
         return float(np.mean(loss_values)), float(np.mean(iou_values)), float(np.mean(bb_iou_values))
 
     def test(self, draw: bool = True, side_len: int = 1, threshold: float = 0.5,
-             offset: torch.tensor = torch.tensor([10.0, 10.0, 10.0])) -> Tuple[float, float, float, float]:
+             offset: torch.tensor = torch.tensor([10.0, 10.0, 10.0])) -> Tuple[float, float, float, float, float]:
+        '''
+        Testing method
+        :param draw: (bool) True if predictions should be drawn and save to .obj file
+        :param side_len: (int) Downscale of labels used
+        :param threshold: (bool) Threshold utilized to calc metrics
+        :param offset: (torch.Tensor) Offset used for bounding box prediction
+        :return: (Tuple[float, float, float, float]) Test metrics: iou, iou bounding box, precision, recall & loss
+        '''
         # Init progress bar
         progress_bar = tqdm(total=len(self.test_data))
         # Get downsampling factor for input and calculate usampling factor
@@ -259,7 +273,7 @@ class OccupancyNetworkWrapper(object):
         print('Test loss = {}'.format(test_loss))
         print('Average memory usage per sample: Original volume = {}MB, Label = {}MB, Prediction = {}MB'.format(
             round(test_size_volume, 2), round(test_size_actual, 2), round(test_size_prediction, 2)))
-        return test_iou, test_precision, test_recall, test_loss
+        return test_iou, test_iou_bounding_box, test_precision, test_recall, test_loss
 
     def logging(self, metric_name: str, value: float) -> None:
         """

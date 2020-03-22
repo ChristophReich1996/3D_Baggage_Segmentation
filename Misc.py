@@ -8,9 +8,20 @@ from pykdtree.kdtree import KDTree
 
 import ModelParts
 
-def intersection_over_union_bounding_box(prediction: torch.tensor, coordinates: torch.tensor, label: torch.tensor,
+
+def intersection_over_union_bounding_box(prediction: torch.Tensor, coordinates: torch.Tensor, label: torch.Tensor,
                                          threshold: float = 0.5,
-                                         offset: torch.tensor = torch.tensor([0.0, 0.0, 0.0])) -> torch.tensor:
+                                         offset: torch.Tensor = torch.tensor([0.0, 0.0, 0.0])) -> torch.Tensor:
+    """
+    Calculates the intersection over union of the predicted bounding box.
+    Works only with one batch!
+    :param prediction: (torch.tensor) Raw prediction of the O-Net (samples)
+    :param coordinates: (torch.tensor) Input coordinates of the O-Net (samples, 3)
+    :param label: (torch.tensor) High resolution label including only ones (samples, 3)
+    :param threshold: (float) Threshold for prediction (default=0.5)
+    :param offset: (torch.Tensor) Bounding box offset used and added to the predicted bounding box
+    :return: (torch.tensor) Intersection over union value
+    """
     # Init kd tree
     kd_tree = KDTree(label.cpu().numpy(), leafsize=16)
     # Estimate which coordinates are weapons
@@ -88,17 +99,25 @@ def intersection_over_union(prediction: torch.tensor, coordinates: torch.tensor,
     return iou
 
 
-def get_tensor_size_mb(tensor: torch.tensor):
+def get_tensor_size_mb(tensor: torch.Tensor):
     """
     Method that calculates the megabyte needed for a tensor to be stored. Takes into account if tensor is on CPU or GPU.
-    :param tensor: (torch.tensor) Input tensor
+    :param tensor: (torch.Tensor) Input tensor
     :return: (int) Tensor size in megabyte
     """
     return tensor.nelement() * tensor.element_size() * 1e-6
 
 
-def precision(prediction: torch.tensor, coordinates: torch.tensor, label: torch.tensor,
-              threshold: float = 0.5) -> torch.tensor:
+def precision(prediction: torch.Tensor, coordinates: torch.Tensor, label: torch.Tensor,
+              threshold: float = 0.5) -> torch.Tensor:
+    '''
+    Method calculates teh precision metric
+    :param prediction: (torch.Tensor) Prediction
+    :param coordinates: (torch.Tensor) Coordinates used
+    :param label: (torch.Tensor) Label
+    :param threshold: (float) Threshold utilized
+    :return: (torch.Tensor) Precision value
+    '''
     # Init kd tree
     kd_tree = KDTree(label.cpu().numpy(), leafsize=16)
     # Estimate which coordinates are weapons
@@ -120,8 +139,16 @@ def precision(prediction: torch.tensor, coordinates: torch.tensor, label: torch.
     return precision
 
 
-def recall(prediction: torch.tensor, coordinates: torch.tensor, label: torch.tensor,
-           threshold: float = 0.5) -> torch.tensor:
+def recall(prediction: torch.Tensor, coordinates: torch.Tensor, label: torch.Tensor,
+           threshold: float = 0.5) -> torch.Tensor:
+    '''
+    Method calculates teh recall metric
+    :param prediction: (torch.Tensor) Prediction
+    :param coordinates: (torch.Tensor) Coordinates used
+    :param label: (torch.Tensor) Label
+    :param threshold: (float) Threshold utilized
+    :return: (torch.Tensor) Recall value
+    '''
     # Init kd tree
     kd_tree = KDTree(label.cpu().numpy(), leafsize=16)
     # Estimate which coordinates are weapons

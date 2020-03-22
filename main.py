@@ -128,4 +128,4 @@ if __name__ == '__main__':
     if bool(args.train):
         model_wrapper.train(epochs=args.epochs)
     if bool(args.test):
-        model_wrapper.test()
+        model_wrapper.test(side_len=8)
