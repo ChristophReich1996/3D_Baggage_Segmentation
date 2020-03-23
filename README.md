@@ -55,7 +55,7 @@ test_pipeline_unet.py
         -n        # Name for loading and saving checkpoints
 ```
 ## Generating
-Generation of the various (decompressed) datasets
+Generating of the various (decompressed) datasets
 ```python
 data_interface.py 
         -a generate # (or check) action
