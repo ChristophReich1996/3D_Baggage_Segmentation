@@ -36,6 +36,9 @@ parser.add_argument('--loss', type=str, default='cross_entropy', choices=['cross
 parser.add_argument('--small_encoder', type=int, default=0, choices=[0, 1],
                     help='If true a smaller encoder is utilized')
 
+parser.add_argument('--load_model', type=str, default=None,
+                    help='Path to model to be loaded (default=None)')
+
 args = parser.parse_args()
 
 import os
@@ -53,19 +56,22 @@ import Misc
 import Lossfunctions
 
 if __name__ == '__main__':
-    if bool(args.small_encoder):
-        channels_in_encoding_blocks = [(1, 32), (32, 32), (32, 64), (64, 64), (64, 8)]
+    if args.load_model is None:
+        if bool(args.small_encoder):
+            channels_in_encoding_blocks = [(1, 32), (32, 32), (32, 64), (64, 64), (64, 8)]
+        else:
+            channels_in_encoding_blocks = [(1, 64), (64, 64), (64, 128), (128, 128), (128, 8)]
+        # Init model
+        if bool(args.use_cat):
+            model = Models.OccupancyNetwork(
+                normalization_decoding='cbatchnorm' if bool(args.use_cbn) else 'batchnorm',
+                channels_in_encoding_blocks=channels_in_encoding_blocks).cuda()
+        else:
+            model = Models.OccupancyNetworkNoCat(
+                normalization_decoding='cbatchnorm' if bool(args.use_cbn) else 'batchnorm',
+                channels_in_encoding_blocks=channels_in_encoding_blocks).cuda()
     else:
-        channels_in_encoding_blocks = [(1, 64), (64, 64), (64, 128), (128, 128), (128, 8)]
-    # Init model
-    if bool(args.use_cat):
-        model = Models.OccupancyNetwork(
-            normalization_decoding='cbatchnorm' if bool(args.use_cbn) else 'batchnorm',
-            channels_in_encoding_blocks=channels_in_encoding_blocks).cuda()
-    else:
-        model = Models.OccupancyNetworkNoCat(
-            normalization_decoding='cbatchnorm' if bool(args.use_cbn) else 'batchnorm',
-            channels_in_encoding_blocks=channels_in_encoding_blocks).cuda()
+        model = torch.load(args.load_model).cuda()
     # Utilize data parallel
     if (args.use_data_parallel):
         model = torch.nn.DataParallel(model)
@@ -98,7 +104,7 @@ if __name__ == '__main__':
                                             test_data=DataLoader(Datasets.WeaponDataset(
                                                 target_path_volume='/fastdata/Smiths_LKA_Weapons_Down/len_8/',
                                                 target_path_label='/fastdata/Smiths_LKA_Weapons_Down/len_8/',
-                                                npoints=2 ** 17,
+                                                npoints=2 ** 18,
                                                 side_len=8,
                                                 length=306,  # 200,
                                                 offset=2600,  # 2600,

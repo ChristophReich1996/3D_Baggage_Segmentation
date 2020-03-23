@@ -65,7 +65,7 @@ class OccupancyNetworkWrapper(object):
         with open(os.path.join(self.path_save_metrics, 'hyperparameter.txt'), 'w') as json_file:
             json.dump(hyperparameter, json_file)
 
-    def train(self, epochs: int = 100, save_best_model: bool = True, save_model_every_n_epoch: int = 100) -> None:
+    def train(self, epochs: int = 100, save_best_model: bool = True, save_model_every_n_epoch: int = 10) -> None:
         """
         Training loop
         :param epochs: (int) Number of epochs to perform
@@ -233,7 +233,7 @@ class OccupancyNetworkWrapper(object):
                 self.logging('recall', recall.item())
                 # Calc loss
                 loss = self.loss_function(prediction, labels)
-                self.logging('test loss', loss.item())
+                self.logging('test_loss', loss.item())
                 # Get memory consumption of tensors (upsample volume to original)
                 size_volume = Misc.get_tensor_size_mb(volume) * upsample_factor
                 size_prediction = Misc.get_tensor_size_mb(prediction)

@@ -33,3 +33,4 @@ Argument | Default value | Info
 `--use_cat` | 1 (True) | One if concatenation should be utilized
 `--use_cbn` | 1 (True) | One if conditional BN should be utilized else normal BN is used
 `--loss` | 'cross_entropy' | Loss function to be utilized ('cross_entropy', 'dice' or 'focal')
+`--load_model` | 'None' | Path to model to be loaded
