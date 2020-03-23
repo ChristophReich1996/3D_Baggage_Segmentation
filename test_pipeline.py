@@ -49,10 +49,10 @@ elif args.cr == 'focal':
 elif args.cr == 'dice':
     oj_loss == layers.DiceLoss(win_sampled_size)
 
-length = 1 if action == 'draw' else 200
-offset = 2791 if action == 'draw' else 2729
+length = 1 if action == 'draw' else 192
+offset = 1 if action == 'draw' else 2729
 print("Load Dataset:", end=" ", flush=True)
-test_dataset = WeaponDataset(target_path="../../../../fastdata/Smiths_LKA_Weapons/len_1_/",
+test_dataset = WeaponDataset(target_path="../../../../fastdata/Smiths_LKA_Weapons/len_1_full/",
                              length=length,
                              offset=offset)
 print("Test Set Completed", end=" - ", flush=True)
@@ -82,4 +82,4 @@ else:
                        name=name,
                        down_fact=down_fact,
                        side_len_down=side_len_down,
-                       batch_size=8))
+                       batch_size=16))

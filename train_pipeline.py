@@ -56,10 +56,10 @@ elif args.cr == 'dice':
     oj_loss = layers.DiceLoss(win_sampled_size)
 
 print("Load Datasets:", end=" ", flush=True)
-train_dataset = WeaponDataset(target_path="../../../../fastdata/Smiths_LKA_Weapons/len_1/",
+train_dataset = WeaponDataset(target_path="../../../../fastdata/Smiths_LKA_Weapons/len_1_/",
                               length=2600)
 print("Training Set Completed", end=" - ", flush=True)
-val_dataset = WeaponDataset(target_path="../../../../fastdata/Smiths_LKA_Weapons/len_1/",
+val_dataset = WeaponDataset(target_path="../../../../fastdata/Smiths_LKA_Weapons/len_1_/",
                             length=128,
                             offset=2600)
 print("Validation Set Completed", flush=True)
@@ -67,8 +67,8 @@ print("Validation Set Completed", flush=True)
 print("", flush=True)
 print("Building Network", end=" ", flush=True)
 network = Network_Generator(rate_learn=lr,
-                            size_iter=2**10,
-                            size_print_every=2**6,
+                            size_iter=20,
+                            size_print_every=2**7,
                             oj_loss=oj_loss,
                             optimizer=optim.Adam,
                             oj_model=Res_Auto_3d_Model_Occu_Parallel().to(device),

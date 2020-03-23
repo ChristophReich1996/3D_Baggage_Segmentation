@@ -131,6 +131,42 @@ class Res_Block_Up_Flat(nn.Module):
 
         return out
 
+# Fully connected residual block with conditional batchnorm
+
+
+class Res_Block_Up_Flat_C(nn.Module):
+    def __init__(self, size_in_channels, size_out_channels, fn_act):
+        super(Res_Block_Up_Flat_C, self).__init__()
+
+        # Nodes ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+        self.layer_flat1 = nn.Linear(size_in_channels, size_out_channels)
+        self.layer_norm1 = CBatchNorm1d(size_out_channels)
+
+        self.fn_act = fn_act
+        if size_in_channels != size_out_channels:
+            self.fn_identity = nn.Linear(
+                size_in_channels, size_out_channels, bias=False)
+        else:
+            self.fn_identity = nn.Identity()
+
+        self.layer_flat2 = nn.Linear(size_out_channels, size_out_channels)
+        self.layer_norm2 = CBatchNorm1d(size_out_channels)
+
+    def forward(self, x):
+        identity = self.fn_identity(x)
+
+        out = self.layer_flat1(x)
+        out = self.layer_norm1(out)
+        out = self.fn_act(out)
+        out = self.layer_flat2(out)
+        out = self.layer_norm2(out)
+
+        out += identity
+        out = self.fn_act(out)
+
+        return out
+
 
 class Res_Block_Up_1D(nn.Module):
     def __init__(self, size_in_channels, size_out_channels, fn_act):
@@ -279,3 +315,39 @@ def IOU_parts(coords, yhat, labels, batch_size, threshold=0.5):
         else:
             union[i] += yhat_i.shape[0]
     return intersection, union
+
+
+class CBatchNorm1d(nn.Module):
+    def __init__(self, f_dim, norm_method='batch_norm'):
+        super().__init__()
+        self.f_dim = f_dim
+        self.norm_method = norm_method
+        # Submodules
+        self.conv_gamma = nn.Sequential(nn.Linear(f_dim, 1))
+        self.conv_beta = nn.Sequential(nn.Linear(f_dim, 1))
+        if norm_method == 'batch_norm':
+            self.bn = nn.BatchNorm1d(f_dim, affine=False)
+        elif norm_method == 'instance_norm':
+            self.bn = nn.InstanceNorm1d(f_dim, affine=False)
+        elif norm_method == 'group_norm':
+            self.bn = nn.GroupNorm1d(f_dim, affine=False)
+        else:
+            raise ValueError('Invalid normalization method!')
+        # self.reset_parameters()
+
+    def reset_parameters(self):
+        nn.init.zeros_(self.conv_gamma.weight)
+        nn.init.zeros_(self.conv_beta.weight)
+        nn.init.ones_(self.conv_gamma.bias)
+        nn.init.zeros_(self.conv_beta.bias)
+
+    def forward(self, x, code=None):
+        # Affine mapping
+        gamma = self.conv_gamma(x if code is None else code)
+        beta = self.conv_beta(x if code is None else code)
+
+        # Batchnorm
+        net = self.bn(x)
+        out = gamma * net + beta
+
+        return out

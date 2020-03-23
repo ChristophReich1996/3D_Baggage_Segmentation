@@ -65,7 +65,7 @@ class WeaponDataset(data.Dataset):
 
 class WeaponDatasetGeneratorLowRes():
     def __init__(self, root, target_path, start_index=0, end_index=-1, threshold_min=0, threshold_max=50000,
-                 dim_max=640, side_len=16):
+                 dim_max=640, side_len=8):
         # Only use values that are needed
         self.threshold_min = threshold_min
         self.threshold_max = threshold_max
@@ -132,24 +132,24 @@ class WeaponDatasetGeneratorLowRes():
                 float(self.threshold_max - self.threshold_min)
             volume_n = np.expand_dims(volume_n, axis=0)
 
-            print("Read image", t2.stop())
+            #print("Read image", t2.stop())
 
             t3 = utils.Timer()
-            # Enforce x axis dim and max pool to low resolution
+            # Enforce x axis dim and avg pool to low resolution
             volume_n = torch.from_numpy(volume_n).to(device)[
                 :, 0:self.dim_max, :, :]
             volume_n = nn.functional.pad(
                 volume_n, (0, 0, 0, 0, 0, self.dim_max-volume_n.shape[1]))
-            volume_pooled_tg = nn.functional.max_pool3d(
+            volume_pooled_tg = nn.functional.avg_pool3d(
                 volume_n, self.side_len, self.side_len)
-            print("Downsampling", t3.stop())
+            #print("Downsampling", t3.stop())
             t4 = utils.Timer()
 
-            print("Padding", t4.stop())
+            #print("Padding", t4.stop())
             np.save(self.target_path + str(index) + ".npy",
                     volume_pooled_tg.cpu().numpy().astype(np.float32))
 
-            # Process labels as volumes
+            # Process labels like volumes
             labels_n = itk.GetArrayFromImage(labels)
             labels_n = np.pad(
                 labels_n, ((offsets_n[0], 0), (offsets_n[1], 0), (offsets_n[2], 0)))
@@ -203,6 +203,7 @@ class WeaponDatasetGeneratorHighRes():
         print("File paths", t1.stop())
 
     def generate_data(self):
+        # range(0, len(self.data)):
         for index in range(len(self.data)):
             print(index, "/", len(self.data), flush=True)
             data_file = self.data[index]
@@ -235,7 +236,7 @@ class WeaponDatasetGeneratorHighRes():
             min_x, min_y, min_z = np.min(coords, axis=0)
 
             # Slice volume down to bouding box of labels
-            offset = 25
+            offset = 50
             start_x = int(max(min_x-offset, 0))
             start_y = int(max(min_y-offset, 0))
             start_z = int(max(min_z-offset, 0))
@@ -403,6 +404,36 @@ def sample(volume_n, label_n, npoints=2**10, side_len=32, sampling='one', down_f
     return out
 
 
+def sample_low(volume_n, label_n, npoints=2**10, share_box=0.5, test=False, side_len=8):
+    volume_n = np.squeeze(volume_n, axis=0)
+    sampling_shapes_tc = [0, volume_n.shape[1] * side_len,
+                          volume_n.shape[2] * side_len, volume_n.shape[3] * side_len]
+    coords_one = label_n[np.random.choice(label_n.shape[0], int(
+        npoints * share_box), replace=False), :]
+
+    # Mixed Coords
+    x_n = np.random.randint(sampling_shapes_tc[1], size=(
+        int(npoints * (1-share_box)), 1))
+    y_n = np.random.randint(sampling_shapes_tc[2], size=(
+        int(npoints * (1-share_box)), 1))
+    z_n = np.random.randint(sampling_shapes_tc[3], size=(
+        int(npoints * (1-share_box)), 1))
+    coords_zero = np.concatenate((x_n, y_n, z_n), axis=1)
+    kd_tree = KDTree(label_n, leafsize=16)
+    dist, _ = kd_tree.query(coords_zero, k=1)
+    labels_zero = np.expand_dims(dist == 0, axis=1).astype(float)
+
+    coords = np.concatenate((coords_one, coords_zero), axis=0)
+    labels = np.concatenate(
+        (np.ones((coords_one.shape[0], 1)), labels_zero), axis=0)
+
+    #print("Access time", t.stop())
+    if test:
+        return torch.from_numpy(volume_n).float(), torch.from_numpy(coords).float(), torch.from_numpy(labels).float(), torch.from_numpy(label_n.astype(int)).float()
+    else:
+        return torch.from_numpy(volume_n).float(), torch.from_numpy(coords).float(), torch.from_numpy(labels).float()
+
+
 def sample_unet(volume_n, label_n, side_len=32, down_fact=0, side_len_down=0, test=False, position=None):
     """Do sampling of volumes with arbitrary resolution 
     1. Extract window of size side_len**3
@@ -500,7 +531,7 @@ def sample_unet(volume_n, label_n, side_len=32, down_fact=0, side_len_down=0, te
 
     # Return depending on required output
     label_volume = np.squeeze(np.zeros_like(volume_n))
-    label_volume[label_n[:,0], label_n[:,1], label_n[:,2]] = 1
+    label_volume[label_n[:, 0], label_n[:, 1], label_n[:, 2]] = 1
     label_volume = np.expand_dims(label_volume, axis=0)
     out = [torch.from_numpy(volume_n).float(),
            torch.from_numpy(label_volume).float()]
@@ -586,7 +617,7 @@ if __name__ == '__main__':
 
         else:
             dataset_gen = WeaponDatasetGeneratorHighRes(root="../../../projects_students/Smiths_LKA_Weapons/ctix-lka-20190503/",
-                                                        target_path="../../../../fastdata/Smiths_LKA_Weapons/len_1_/")
+                                                        target_path="../../../../fastdata/Smiths_LKA_Weapons/len_1_full/")
             dataset_gen.generate_data()
     else:
         if args.a == "check":

@@ -90,7 +90,6 @@ class Network_Generator():
                 # Consider any extractable window of size side_len**3 to write total object
                 for vol_x in range(0, shapes[1], side_len):
                     print("x", vol_x, "Batch", batch_counter, flush=True)
-                    print(loss_iou_batch)
                     for vol_y in range(0, shapes[2], side_len):
                         for vol_z in range(0, shapes[3], side_len):
                             # Get extracted window and downsampled extracted window, SEE sample in data_interface.py for further information
@@ -136,7 +135,8 @@ class Network_Generator():
                             losses_test_batch.append(loss_val_batch)
                             # Urgently needed due to incredibly bad garbage collection by python
                             gc.collect()
-                            loss_iou_batch = torch.mean(intersection / (union + 0.00001))
+                            loss_iou_batch = torch.mean(
+                                intersection / (union + 0.00001))
                 losses_iou_batch.append(loss_iou_batch)
 
         loss_test = np.mean(losses_test_batch)
@@ -304,7 +304,8 @@ class Network_Generator():
                 vol = volume_in[0]
                 maximum = np.max(vol)
                 vol = vol/maximum
-                vol[vol - 0.17 < 0] = 0
+                # Do not print uneccessar much
+                vol[vol - 0.5 < 0] = 0
 
                 with open('outfile_org.obj', 'w') as f:
                     for i in range(vol.shape[1]):
@@ -410,7 +411,7 @@ class Network_Generator():
                                 coords_sampled).float()
 
                             yhat = (self._oj_model(volume.to(device), coords_sampled_torch.to(
-                                device), volume_down.to(device)) > 0.7).float()
+                                device), volume_down.to(device)) > 0.5).float()
 
                             coords_hit = coords_sampled_torch[torch.squeeze(
                                 yhat == 1)].cpu().numpy()
@@ -478,7 +479,7 @@ class Network_Generator():
                 for j, batch in enumerate(loader_val):
                     cache_vol.append(batch[0])
                     cache_labels.append(batch[1])
-                print(t2.stop())
+                # print(t2.stop())
             for iteration in range(num_iterations):
                 for j in range(0, len(cache_vol), 8):
                     # After 8 volumes and labels are cache, validate
@@ -520,7 +521,7 @@ class Network_Generator():
             loss_val = np.mean(losses_val_batch)
             loss_iou = np.mean(losses_iou_batch)
             losses_val.append((loss_val))
-            print(timer.stop())
+            # print(timer.stop())
             if iou:
                 return loss_val, loss_iou
             else:
@@ -723,9 +724,9 @@ class Res_Auto_3d_Model_Occu(nn.Module):
                                     layers.Res_Block_Down_3D(
                                         32, 64, 3, 1, self.activation(), True),
                                     layers.Res_Block_Down_3D(
-                                        64, 64, 3, 1, self.activation(), False),
+                                        64, 64, 3, 1, self.activation(), True),
                                     layers.Res_Block_Down_3D(
-                                        64, 64, 3, 1, self.activation(), False),
+                                        64, 64, 3, 1, self.activation(), True),
                                     layers.Res_Block_Down_3D(
                                         64, 64, 3, 1, self.activation(), False),
                                     layers.Res_Block_Down_3D(64, 32, 3, 1, self.activation(), False))
@@ -734,14 +735,14 @@ class Res_Auto_3d_Model_Occu(nn.Module):
                                         layers.Res_Block_Down_3D(
                                             32, 64, 3, 1, self.activation(), True),
                                         layers.Res_Block_Down_3D(
-                                            64, 64, 3, 1, self.activation(), False),
+                                            64, 64, 3, 1, self.activation(), True),
                                         layers.Res_Block_Down_3D(
-                                            64, 64, 3, 1, self.activation(), False),
+                                            64, 64, 3, 1, self.activation(), True),
                                         layers.Res_Block_Down_3D(
                                             64, 64, 3, 1, self.activation(), False),
                                         layers.Res_Block_Down_3D(64, 32, 3, 1, self.activation(), False))
 
-        self.decode = nn.Sequential(layers.Res_Block_Up_Flat(4096 + 3, 512, nn.SELU()),  # 6912
+        self.decode = nn.Sequential(layers.Res_Block_Up_Flat(1728 + 3, 512, nn.SELU()),  # 6912
                                     layers.Res_Block_Up_Flat(
                                         512, 512, nn.SELU()),
                                     # layers.Res_Block_Up_Flat(

@@ -63,7 +63,7 @@ print("Validation Set Completed", flush=True)
 print("", flush=True)
 print("Building Network", end=" ", flush=True)
 network = Network_Generator(rate_learn=lr,
-                            size_iter=2**10,
+                            size_iter=20,
                             size_print_every=2**7,
                             oj_loss=oj_loss,
                             optimizer=optim.Adam,

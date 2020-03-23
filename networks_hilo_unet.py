@@ -74,6 +74,7 @@ class Network_Generator():
         self._oj_model.load_state_dict(checkpoint)
         del checkpoint  # dereference seems crucial
         torch.cuda.empty_cache()
+
         # Test with same settings as for training and additionally calculate IOU
         iou_per_batch = []
         with torch.no_grad():
@@ -83,10 +84,15 @@ class Network_Generator():
                 shapes = np.max(
                     np.array([volume_in[i].shape for i in range(batch_size)]), axis=0)
 
+                # Print mean box sizes
+                # print(np.mean(
+                #    np.array([volume_in[i].shape for i in range(batch_size)]), axis=0))
+
+                # Init IoU
                 intersection_batch = torch.zeros((batch_size)).to(device)
                 union_batch = torch.zeros((batch_size)).to(device)
 
-                # Consider any extractable window of size side_len**3 to write total object
+                # Consider any extractable window of size side_len**3 to test total object
                 for vol_x in range(0, shapes[1], side_len):
                     print("batch", batch_count, "x", vol_x)
                     print(torch.mean(
@@ -141,7 +147,6 @@ class Network_Generator():
                         gc.collect()
 
                 iou_batch = torch.mean(intersection_batch / union_batch).item()
-                print(iou_batch)
                 iou_per_batch.append(iou_batch)
 
         return np.mean(np.array(iou_per_batch))
@@ -174,12 +179,15 @@ class Network_Generator():
         torch.cuda.empty_cache()
         # Test with same settings as for training and additionally calculate IOU
         with torch.no_grad():
+            intersection_batch = torch.zeros(
+                (batch_size)).to(device)
+            union_batch = torch.zeros((batch_size)).to(device)
             for batch in loader_test:
                 self._oj_model.eval()
                 volume_in, label_in = batch
                 shapes = np.max(
                     np.array([volume_in[i].shape for i in range(batch_size)]), axis=0)
-
+                print(shapes)
                 # Consider any extractable window of size side_len**3 to write total object
                 with open('outfile_auto_unet.obj', 'w') as f:
                     with open('outfile_auto_unet_org.obj', 'w') as fo:
@@ -194,9 +202,9 @@ class Network_Generator():
                                     for i in range(batch_size):
                                         # Sample volume, to get original volume back,
                                         # as well as downsampled volume, coords, and corresponding labels
-                                        if volume_in[i].shape[1] - vol_x <= 0 or \
-                                                volume_in[i].shape[2] - vol_y <= 0 or \
-                                                volume_in[i].shape[3] - vol_z <= 0:
+                                        if volume_in[i].shape[1] - vol_x - 16 <= 0 or \
+                                                volume_in[i].shape[2] - vol_y - 16 <= 0 or \
+                                                volume_in[i].shape[3] - vol_z - 16 <= 0:
                                             continue
 
                                         samp = sample_unet(np.expand_dims(volume_in[i], axis=0), label_in[i], side_len=side_len, test=False,
@@ -222,9 +230,15 @@ class Network_Generator():
                                     # Eval network
                                     yhat = self._oj_model(
                                         volume_d, volume_down.to(device))
+                                    intersection, union = layers.IOU_unet_val_parts(
+                                        yhat, labels_d, volume.shape[0], threshold=0.7)
+
+                                    # Save counts and calculate iou later for total volumes
+                                    intersection_batch[samples_id] += intersection
+                                    union_batch[samples_id] += union
 
                                     # Write one example
-                                    to_write = (yhat[0] >= 0.5).cpu(
+                                    to_write = (yhat[0] >= 0.7).cpu(
                                     ).numpy().astype(np.short)
                                     to_write_l = labels_d[0].cpu(
                                     ).numpy().astype(np.short)
@@ -239,6 +253,9 @@ class Network_Generator():
                                                              " " + "0.0" + " " + "0.5" + " " + "0.0  " + "\n")
 
                                 gc.collect()
+                    iou_batch = torch.mean(
+                        intersection_batch / union_batch).item()
+                    print(iou_batch)
                 break
 
     def _val(self, loader_val, losses_val, npoints, side_len, down_fact, side_len_down, iou=False, num_iterations=1, cache_vol=[], cache_labels=[]):
@@ -268,10 +285,10 @@ class Network_Generator():
                 for j, batch in enumerate(loader_val):
                     cache_vol.append(batch[0])
                     cache_labels.append(batch[1])
-                print(t2.stop())
+                # print(t2.stop())
             for iteration in range(num_iterations):
                 for j in range(0, len(cache_vol), 8):
-                    # After 8 volumes and labels are cache, validate
+                    # After 8 volumes and labels are cached, validate
                     samples = []
                     for i in range(8):
                         if i+j > len(cache_vol):
@@ -311,7 +328,7 @@ class Network_Generator():
             loss_val = np.mean(losses_val_batch)
             loss_iou = np.mean(losses_iou_batch)
             losses_val.append((loss_val))
-            print(timer.stop())
+            # print(timer.stop())
             if iou:
                 return loss_val, loss_iou
             else:

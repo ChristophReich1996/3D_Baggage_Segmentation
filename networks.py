@@ -9,7 +9,7 @@ from pykdtree.kdtree import KDTree
 import functools
 import random
 
-from data_interface import sample, many_to_one_collate_fn_sample, many_to_one_collate_fn_sample_test
+from data_interface import sample_low, many_to_one_collate_fn_sample, many_to_one_collate_fn_sample_test
 import utils
 import layers
 from config import device
@@ -581,7 +581,7 @@ class Network_Generator():
                 if j % 8 == 7:
                     samples = []
                     for i in range(8):
-                        samp = sample(cache_vol[i], cache_labels[i], npoints=npoints, side_len=side_len, test=False)
+                        samp = sample_low(cache_vol[i], cache_labels[i], test=False)
                         if samp is None:
                              continue
                         samples.append(samp)
@@ -622,6 +622,28 @@ class Network_Generator():
             self._oj_model.train()
             yhat = self._oj_model(volume.to(device), coords.to(device))
             loss_train = self._oj_loss(yhat, labels.to(device))
+            coords_reshaped = coords.reshape(win_sampled_size, -1, 3)
+            labels_reshaped = labels.reshape(win_sampled_size, -1, 1)
+            yhat_reshaped = yhat.reshape(win_sampled_size, -1, 1)
+            max_diff = []
+            min_diff = []
+            for i in range(win_sampled_size):
+                try:
+                    max_diff.append(
+                        torch.abs(torch.max(coords_reshaped[i][torch.squeeze(yhat_reshaped[i] > 0.5)], dim=0)[0] - 
+                        torch.max(coords_reshaped[i][torch.squeeze(labels_reshaped[i] == 1.0)], dim=0)[0]))
+                    min_diff.append(torch.abs(
+                        torch.min(coords_reshaped[i][torch.squeeze(labels_reshaped[i] == 1.0)], dim=0)[0] -
+                        torch.min(coords_reshaped[i][torch.squeeze(yhat_reshaped[i] > 0.5)], dim=0)[0]))
+                except:
+                    pass
+            try:
+                print("Max Diff Mean", torch.mean(torch.stack(max_diff), dim=0))
+                print("Min Diff Mean", torch.mean(torch.stack(min_diff), dim=0))
+                print("Max Diff", torch.max(torch.stack(max_diff), dim=0)[0])
+                print("Min Diff", torch.max(torch.stack(min_diff), dim=0)[0])
+            except:
+                pass
             loss_train.backward()
             self._oj_optimizer.step()
             self._oj_optimizer.zero_grad()
@@ -650,7 +672,7 @@ class Network_Generator():
                     indices = np.random.choice(len(cache_vol), win_sampled_size)
                     samples = []
                     for i in indices:
-                        samp = sample(cache_vol[i], cache_labels[i], npoints=npoints, side_len=side_len, test=False)
+                        samp = sample_low(cache_vol[i], cache_labels[i], npoints=npoints, test=False)
                         if samp is None:
                              continue
                         samples.append(samp)
@@ -706,14 +728,11 @@ class Res_Auto_3d_Model_Occu(nn.Module):
                                     layers.Res_Block_Down_3D(64, 64, 3, 1, nn.SELU(), True),
                                     layers.Res_Block_Down_3D(64, 64, 3, 1, nn.SELU(), True),
                                     layers.Res_Block_Down_3D(64, 64, 3, 1, nn.SELU(), True),
-                                    layers.Res_Block_Down_3D(64, 3, 3, 1, nn.SELU(), True))
+                                    layers.Res_Block_Down_3D(64, 3, 3, 1, nn.SELU(), False))
 
-        self.decode = nn.Sequential(layers.Res_Block_Up_Flat(180 + 3, 256, nn.SELU()),
-                                    layers.Res_Block_Up_Flat(256, 256, nn.SELU()),
-                                    layers.Res_Block_Up_Flat(256, 256, nn.SELU()),
-                                    layers.Res_Block_Up_Flat(256, 256, nn.SELU()),
-                                    layers.Res_Block_Up_Flat(256, 128, nn.SELU()),
-                                    layers.Res_Block_Up_Flat(128, 1, nn.Sigmoid()))
+        self.decode = nn.Sequential(layers.Res_Block_Up_Flat(1620 + 3, 512, nn.SELU()),
+                                    layers.Res_Block_Up_Flat(512, 512, nn.SELU()),
+                                    layers.Res_Block_Up_Flat(512, 1, nn.Sigmoid()))
 
     def forward(self, volume, coords):
         out = self.encode(volume)
