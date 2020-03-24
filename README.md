@@ -34,3 +34,6 @@ Argument | Default value | Info
 `--use_cbn` | 1 (True) | One if conditional BN should be utilized else normal BN is used
 `--loss` | 'cross_entropy' | Loss function to be utilized ('cross_entropy', 'dice' or 'focal')
 `--load_model` | 'None' | Path to model to be loaded
+
+## Results
+![text](images/O_Net_plot.PNG)
