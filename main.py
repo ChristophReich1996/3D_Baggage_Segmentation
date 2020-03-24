@@ -94,7 +94,7 @@ if __name__ == '__main__':
                                                 model.parameters(), lr=args.lr),
                                             training_data=DataLoader(Datasets.WeaponDataset(
                                                 target_path_volume='/fastdata/Smiths_LKA_Weapons_Down/len_8/',
-                                                target_path_label='/fastdata/Smiths_LKA_Weapons_Down/len_8/',
+                                                target_path_label='/visinf/home/vilab15/Projects/3D_baggage_segmentation/Data_len_1/',
                                                 npoints=2 ** 14,
                                                 side_len=8,
                                                 length=2600),
@@ -103,7 +103,7 @@ if __name__ == '__main__':
                                                 num_workers=args.batch_size, pin_memory=True),
                                             test_data=DataLoader(Datasets.WeaponDataset(
                                                 target_path_volume='/fastdata/Smiths_LKA_Weapons_Down/len_8/',
-                                                target_path_label='/fastdata/Smiths_LKA_Weapons_Down/len_8/',
+                                                target_path_label='/visinf/home/vilab15/Projects/3D_baggage_segmentation/Data_len_1/',
                                                 npoints=2 ** 18,
                                                 side_len=8,
                                                 length=306,  # 200,
@@ -116,7 +116,7 @@ if __name__ == '__main__':
                                             ),
                                             validation_data=DataLoader(Datasets.WeaponDataset(
                                                 target_path_volume='/fastdata/Smiths_LKA_Weapons_Down/len_8/',
-                                                target_path_label='/fastdata/Smiths_LKA_Weapons_Down/len_8/',
+                                                target_path_label='/visinf/home/vilab15/Projects/3D_baggage_segmentation/Data_len_1/',
                                                 npoints=2 ** 16,
                                                 side_len=8,
                                                 length=36,  # 200,
@@ -129,9 +129,10 @@ if __name__ == '__main__':
                                             ),
                                             loss_function=loss_function,
                                             device='cuda',
-                                            data_folder=folder_name)
+                                            data_folder=folder_name,
+                                            save_data_path='Save_data_low_high')
 
     if bool(args.train):
         model_wrapper.train(epochs=args.epochs)
     if bool(args.test):
-        model_wrapper.test(side_len=8)
+        model_wrapper.test(side_len=1)

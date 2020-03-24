@@ -21,7 +21,7 @@ class OccupancyNetworkWrapper(object):
                  test_data: torch.utils.data.dataloader,
                  validation_data: torch.utils.data.dataloader,
                  loss_function: Callable[[torch.tensor, torch.tensor], torch.tensor], device: str = 'cuda',
-                 save_data_path: str = 'Saved_data', data_folder: str = None) -> None:
+                 save_data_path: str = 'Saved_data_', data_folder: str = None) -> None:
         """
         Class constructor
         :param occupancy_network: (nn.Module) Occupancy network for binary segmentation
@@ -257,7 +257,7 @@ class OccupancyNetworkWrapper(object):
         test_bounding_box_error_z = self.get_average_metric('bounding_box_error_z')
         test_precision = self.get_average_metric('precision')
         test_recall = self.get_average_metric('recall')
-        test_loss = self.get_average_metric('test loss')
+        test_loss = self.get_average_metric('test_loss')
         test_size_volume = self.get_average_metric('size_volume')
         test_size_prediction = self.get_average_metric('size_prediction')
         test_size_actual = self.get_average_metric('size_actual')
