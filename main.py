@@ -56,7 +56,6 @@ import Misc
 import Lossfunctions
 
 if __name__ == '__main__':
-    '''
     if args.load_model is None:
         if bool(args.small_encoder):
             channels_in_encoding_blocks = [(1, 32), (32, 32), (32, 64), (64, 64), (64, 8)]
@@ -76,8 +75,6 @@ if __name__ == '__main__':
     # Utilize data parallel
     if (args.use_data_parallel):
         model = torch.nn.DataParallel(model)
-    '''
-    model = Models.OccupancyNetworkNoCatCNN()
     # Print model
     print(model)
     # Print number of parameters included in the model
