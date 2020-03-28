@@ -203,12 +203,14 @@ def get_normalization_3d(normalization: str, channels: int, affine: bool = True)
     :param channels: (int) Number of channels to use
     :return: (nn.Sequential) Normalization operation
     """
-    assert normalization in ['batchnorm', 'instancenorm'], \
+    assert normalization in ['batchnorm', 'instancenorm', 'none'], \
         'Normalization {} is not available!'.format(normalization)
     if normalization == 'batchnorm':
         return nn.Sequential(nn.BatchNorm3d(channels, affine=affine))
     elif normalization == 'instancenorm':
         return nn.Sequential(nn.InstanceNorm3d(channels, affine=affine))
+    elif normalization == 'none':
+        return nn.Identity()
     else:
         raise RuntimeError('Normalization {} is not available!'.format(normalization))
 

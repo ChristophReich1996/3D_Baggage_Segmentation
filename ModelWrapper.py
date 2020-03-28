@@ -125,6 +125,7 @@ class OccupancyNetworkWrapper(object):
             self.save_metrics(self.metrics, path=self.path_save_metrics)
         progress_bar.close()
 
+    @torch.no_grad()
     def validate(self, threshold: float = 0.5, offset: torch.Tensor = torch.tensor([10.0, 10.0, 10.0])) -> Tuple[
         float, float, float]:
         '''
@@ -165,6 +166,7 @@ class OccupancyNetworkWrapper(object):
                                                               threshold=threshold, offset=offset)[0].item())
         return float(np.mean(loss_values)), float(np.mean(iou_values)), float(np.mean(bb_iou_values))
 
+    @torch.no_grad()
     def test(self, draw: bool = True, side_len: int = 1, threshold: float = 0.5,
              offset: torch.tensor = torch.tensor([10.0, 10.0, 10.0])) -> Tuple[float, float, float, float, float]:
         '''

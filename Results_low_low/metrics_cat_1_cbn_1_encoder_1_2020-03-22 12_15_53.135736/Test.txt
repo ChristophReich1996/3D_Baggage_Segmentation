@@ -1,0 +1,8 @@
+Intersection over union = 0.1835989919551983
+Intersection over union bounding box = 0.5117707800826216
+Mean bounding box shape = 224.718954248366, 83.92483660130719, 198.78758169934642
+Mean bounding box error = 39.61437908496732, 14.029411764705882, 36.3235294117647
+Precision = 0.1877097984855033
+Recall = 0.9212396545640005
+Test loss = 0.025513824693298614
+Average memory usage per sample: Original volume = 656.02MB, Label = 3.46MB, Prediction = 1.05MB
