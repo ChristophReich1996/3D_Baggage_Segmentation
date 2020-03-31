@@ -1,5 +1,5 @@
 # 3D CT Scan Segmentation With Occupancy Network
-This repo implements a 3D segmentation task for an airport baggage dataset.
+This repo implements a 3D superresolution segmentation task for an airport baggage dataset.
 
 ## Model Architecture
 To solve the problem of binary classification an 
