@@ -23,7 +23,7 @@ Training HiLo-Network using CNN decoder
 train_pipeline_unet.py 
         -sl 16    # Length of patch sides
         -sld 8    # Length of patch sides divided by two\
-        -df 2     # Downsampling factor 
+        -df 8     # Downsampling factor 
         -lr 3     # Learning Rate
         -ct fifo  # Queue Type
         -cr focal # Loss function
