@@ -724,9 +724,9 @@ class Res_Auto_3d_Model_Occu(nn.Module):
                                     layers.Res_Block_Down_3D(
                                         32, 64, 3, 1, self.activation(), True),
                                     layers.Res_Block_Down_3D(
-                                        64, 64, 3, 1, self.activation(), True),
+                                        64, 64, 3, 1, self.activation(), False),
                                     layers.Res_Block_Down_3D(
-                                        64, 64, 3, 1, self.activation(), True),
+                                        64, 64, 3, 1, self.activation(), False),
                                     layers.Res_Block_Down_3D(
                                         64, 64, 3, 1, self.activation(), False),
                                     layers.Res_Block_Down_3D(64, 32, 3, 1, self.activation(), False))
@@ -735,14 +735,14 @@ class Res_Auto_3d_Model_Occu(nn.Module):
                                         layers.Res_Block_Down_3D(
                                             32, 64, 3, 1, self.activation(), True),
                                         layers.Res_Block_Down_3D(
-                                            64, 64, 3, 1, self.activation(), True),
+                                            64, 64, 3, 1, self.activation(), False),
                                         layers.Res_Block_Down_3D(
-                                            64, 64, 3, 1, self.activation(), True),
+                                            64, 64, 3, 1, self.activation(), False),
                                         layers.Res_Block_Down_3D(
                                             64, 64, 3, 1, self.activation(), False),
                                         layers.Res_Block_Down_3D(64, 32, 3, 1, self.activation(), False))
 
-        self.decode = nn.Sequential(layers.Res_Block_Up_Flat(1728 + 3, 512, nn.SELU()),  # 6912
+        self.decode = nn.Sequential(layers.Res_Block_Up_Flat(4096 + 3, 512, nn.SELU()),  # 6912
                                     layers.Res_Block_Up_Flat(
                                         512, 512, nn.SELU()),
                                     # layers.Res_Block_Up_Flat(
