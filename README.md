@@ -1,6 +1,8 @@
 # 3D CT Scan Segmentation With Occupancy Network
 This repo implements a 3D superresolution segmentation task for an airport baggage dataset.
 
+__*Our final paper can be found [here](https://github.com/ChristophReich1996/3D_baggage_segmentation/blob/hilo_network/hiLo-Network-Paper.pdf).*__
+
 ## Model Architecture
 To solve the problem of binary classification an 
 [Occupancy Network](https://arxiv.org/pdf/1812.03828.pdf) is utilize. The occupancy network is implemented 
