@@ -1,6 +1,6 @@
 # Scalable 3D Semantic Segmentation for Gun Detection in CT Scans
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/ChristophReich1996/3D_Baggage_Segmentation/blob/master/LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/ChristophReich1996/3D_Baggage_Segmentation/blob/Toeffi/License)
 
 This repo implements a 3D superresolution segmentation task for an airport baggage dataset.
 
