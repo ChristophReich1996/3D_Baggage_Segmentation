@@ -2,9 +2,11 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/ChristophReich1996/3D_Baggage_Segmentation/blob/Toeffi/License)
 
-This repo implements a 3D superresolution segmentation task for an airport baggage dataset.
+This repo implements a 3D super-resolution segmentation task for an airport baggage dataset.
 
 __*Our final paper can be found [here](https://github.com/ChristophReich1996/3D_baggage_segmentation/blob/hilo_network/hiLo-Network-Paper.pdf).*__
+
+The HiLo-Network code can be found in the corresponding [hilo_network branch](https://github.com/ChristophReich1996/3D_Baggage_Segmentation/tree/hilo_network).
 
 ## Model Architecture
 To solve the problem of binary classification an 
