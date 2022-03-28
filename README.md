@@ -1,4 +1,7 @@
-# 3D CT Scan Segmentation With Occupancy Network
+# Scalable 3D Semantic Segmentation for Gun Detection in CT Scans
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/ChristophReich1996/3D_Baggage_Segmentation/blob/master/LICENSE)
+
 This repo implements a 3D superresolution segmentation task for an airport baggage dataset.
 
 __*Our final paper can be found [here](https://github.com/ChristophReich1996/3D_baggage_segmentation/blob/hilo_network/hiLo-Network-Paper.pdf).*__
